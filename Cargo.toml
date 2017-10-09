@@ -1,0 +1,8 @@
+[package]
+name = "image_processor"
+version = "0.1.0"
+authors = ["Calum Forster <calumforster@live.co.uk>"]
+
+[dependencies]
+image = "*"
+terminal_graphics = "*"
