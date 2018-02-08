@@ -5,4 +5,6 @@ authors = ["Calum Forster <calumforster@live.co.uk>"]
 
 [dependencies]
 image = "*"
-terminal_graphics = "*"
+terminal_graphics = { path = "../terminal_graphics_api" }
+terminal_size = "*"
+clap = "*"

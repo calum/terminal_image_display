@@ -15,7 +15,7 @@ pub fn pixelate_image(img: &mut RgbImage, width: u32, height: u32) -> RgbImage {
 }
 
 pub fn get_image(filename: &str) -> RgbImage {
-    let mut img = image::open(&Path::new("ferris.png")).unwrap();
+    let mut img = image::open(&Path::new(filename)).unwrap();
 
     img.to_rgb()
 }
