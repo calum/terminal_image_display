@@ -55,8 +55,6 @@ fn display_image(image_filepath: &str, width: u32, height: u32) {
         let rgb = pixel.to_rgb().data;
         let colour = Colour::from_rgb(rgb[0], rgb[1], rgb[2]);
 
-        //println!("{:?}: ({}, {}, {})",colour,rgb[0], rgb[1], rgb[2]);
-
         screen.set_pixel(x as isize, y as isize, ' ', Colour::White, colour);
     }
 

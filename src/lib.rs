@@ -9,7 +9,7 @@ pub fn pixelate_image(img: &mut RgbImage, width: u32, height: u32) -> RgbImage {
     // Create a new ImgBuf
     let mut imgbuf = image::ImageBuffer::new(width, height);
 
-    merge_pixels(&mut imgbuf, img);
+    closest_match(&mut imgbuf, img);
 
     imgbuf
 }
@@ -20,6 +20,27 @@ pub fn get_image(filename: &str) -> RgbImage {
     img.to_rgb()
 }
 
+/// Downsizes the image using the closest match algorithm
+pub fn closest_match(imgbuf: &mut RgbImage, img: &mut RgbImage) {
+    // The dimensions method returns the images width and height
+    let (width, height) = img.dimensions();
+    let (out_width, out_height) = imgbuf.dimensions();
+
+    // set the variables needed to average out the pixels
+    let scale_x = (width as f32)/(out_width as f32);
+    let scale_y = (height as f32)/(out_height as f32);
+
+    // Iterate over the coordinates and pixels of the image
+    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+
+        let closest_pixel = img.get_pixel(x*(scale_x as u32), y*(scale_y as u32));
+
+        // Create an 8bit pixel of type RGB
+        *pixel = closest_pixel.clone();
+    }
+}
+
+/// Averages all rgb values of a group of pixels. Causes dimming.
 pub fn merge_pixels(imgbuf: &mut RgbImage, img: &mut RgbImage) {
     // The dimensions method returns the images width and height
     let (width, height) = img.dimensions();
@@ -28,7 +49,7 @@ pub fn merge_pixels(imgbuf: &mut RgbImage, img: &mut RgbImage) {
     // set the variables needed to average out the pixels
     let scale_x = width/out_width;
     let scale_y = height/(out_height);
-    let num_pixels = (scale_y*scale_y) as f32;
+    let num_pixels = (scale_y*scale_x) as f32;
 
     // Iterate over the coordinates and pixels of the image
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
