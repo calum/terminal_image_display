@@ -1,9 +1,8 @@
 extern crate image;
 
-use std::fs::File;
 use std::path::Path;
 
-use image::{GenericImage, SubImage, Pixel, ImageBuffer, RgbImage};
+use image::{GenericImage, Pixel, RgbImage};
 
 pub fn pixelate_image(img: &mut RgbImage, width: u32, height: u32) -> RgbImage {
     // Create a new ImgBuf
@@ -15,7 +14,7 @@ pub fn pixelate_image(img: &mut RgbImage, width: u32, height: u32) -> RgbImage {
 }
 
 pub fn get_image(filename: &str) -> RgbImage {
-    let mut img = image::open(&Path::new(filename)).unwrap();
+    let img = image::open(&Path::new(filename)).unwrap();
 
     img.to_rgb()
 }
@@ -32,8 +31,13 @@ pub fn closest_match(imgbuf: &mut RgbImage, img: &mut RgbImage) {
 
     // Iterate over the coordinates and pixels of the image
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+        let x_f32 = x as f32;
+        let y_f32 = y as f32;
 
-        let closest_pixel = img.get_pixel(x*(scale_x as u32), y*(scale_y as u32));
+        let closest_pixel_x = (x_f32 * scale_x).floor() as u32;
+        let closest_pixel_y = (y_f32 * scale_y).floor() as u32;
+
+        let closest_pixel = img.get_pixel(closest_pixel_x, closest_pixel_y);
 
         // Create an 8bit pixel of type RGB
         *pixel = closest_pixel.clone();
