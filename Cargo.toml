@@ -1,10 +1,25 @@
 [package]
-name = "image_processor"
-version = "0.1.0"
+name = "termage"
+version = "1.0.0"
 authors = ["Calum Forster <calumforster@live.co.uk>"]
+readme = "README.md"
+keywords = ["terminal", "image", "view", "termage"]
+repository = "https://github.com/calum/terminal_image_display"
+license = "MIT/Apache-2.0"
+description = "Display images in the terminal!"
+exclude = ["docs/*"]
+
+[[bin]]
+name = "termage"
+path = "src/bin/main.rs"
+doc = false
+
+[lib]
+name = "termage"
+path = "src/lib.rs"
 
 [dependencies]
-image = "*"
-terminal_graphics = { path = "../terminal_graphics_api" }
-terminal_size = "*"
-clap = "*"
+image = "0.18.0"
+terminal_graphics = "0.1.3"
+terminal_size = "0.1.7"
+clap = "2.29.4"

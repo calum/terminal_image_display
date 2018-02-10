@@ -1,5 +1,5 @@
 extern crate image;
-extern crate image_processor;
+extern crate termage;
 extern crate terminal_graphics;
 extern crate terminal_size;
 extern crate clap;
@@ -11,7 +11,7 @@ use terminal_graphics::Colour;
 
 use terminal_size::{Width, Height, terminal_size};
 
-use image_processor::{get_image, pixelate_image};
+use termage::{get_image, pixelate_image};
 
 use clap::{Arg, App};
 
@@ -95,10 +95,5 @@ fn display_image(image_filepath: &str, width: u32, height: u32) {
     }
 
     screen.print();
-
-    // Save the image
-    //let ref mut fout = File::create(&Path::new("test.png")).unwrap();
-
-    // We must indicate the image’s color type and what format to save as
-    //let _ = image::ImageRgb8(img_out).save(fout, image::PNG);
+    println!("");
 }
