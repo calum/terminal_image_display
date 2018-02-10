@@ -1,5 +1,5 @@
 # Termage
-View images in your terminal!
+View images in your terminal! 🖼️🖳
 
 ## Install
 
