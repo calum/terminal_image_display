@@ -17,7 +17,7 @@ use clap::{Arg, App};
 
 fn main() {
     let matches = App::new("Termage")
-                    .version("0.1")
+                    .version("1.0.1")
                     .about("Display any image in the terminal with Termage!")
                     .author("Calum")
                     .arg(Arg::with_name("image")
