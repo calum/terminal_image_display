@@ -169,13 +169,12 @@ pub fn display_gif(gif_filepath: &str, width: u32, height: u32) {
     // create the new reduced gif by shrinking each frame to fit
     // the terminal
     for (i, frame) in frames.enumerate() {
+        let delay = frame.delay().to_integer() as u64;
         let mut image = frame.into_buffer();
 
         // display the image:
-        //render_image(image.convert(), width, height);
+        render_image(image.convert(), width, height);
 
-        println!("Frame: {}", i);
-        thread::sleep(time::Duration::from_millis(100));
-        println!("next frame...");
+        thread::sleep(time::Duration::from_millis(delay));
     }
 }
