@@ -1,5 +1,5 @@
 # Termage
-View images in your terminal! 🖼️🖥️
+View images and gifs in your terminal! 🖼️🖥️
 
 ## Install
 
@@ -19,18 +19,19 @@ cargo run -- --image ferris.png
 ```
 $ termage --help
 
-Termage 0.1
-Calum
+Termage 1.0.1
+https://github.com/calum/terminal_image_display
 Display any image in the terminal with Termage!
 
 USAGE:
-    termage --image <FILE>
+    termage [OPTIONS]
 
 FLAGS:
     -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
+    -g, --gif <FILE>      Input animated gif filepath
     -i, --image <FILE>    Input image filepath
 ```
 
@@ -38,9 +39,14 @@ OPTIONS:
 ```
 termage -i ferris.png
 ```
-![](docs/screenshots/ferris_termage.png)
+![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/ferris_termage.png)
+
+```
+termage -g pika.gif
+```
+![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/pika_termage.gif)
 
 ```
 termage -i pika.png
 ```
-![](docs/screenshots/pika_termage.png)
+![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/pika_termage.png)
