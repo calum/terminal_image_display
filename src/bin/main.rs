@@ -19,7 +19,7 @@ fn main() {
     let matches = App::new("Termage")
                     .version("1.0.1")
                     .about("Display any image in the terminal with Termage!")
-                    .author("Calum")
+                    .author("https://github.com/calum/terminal_image_display")
                     .arg(Arg::with_name("image")
                             .short("i")
                             .long("image")
@@ -44,7 +44,10 @@ fn main() {
         if let Some(filepath) = image_filepath {
             display_image(filepath, w as u32, h as u32);
         } else if let Some(filepath) = gif_filepath {
-            display_gif(filepath, w as u32, h as u32);
+            loop {
+                display_gif(filepath, w as u32, h as u32);
+
+            }
         }
     } else {
         println!("Error: Unable to get terminal dimensions.");
