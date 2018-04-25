@@ -1,5 +1,10 @@
-# Termage
-View images and gifs in your terminal! 🖼️🖥️
+<div align="center">
+  <a href="https://calum.github.io/terminal_image_display">
+    <img src="https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/termage.png" alt="Termage" height="200" />
+  </a>
+</div>
+
+<h4 align="center">View images and gifs in your terminal! 🖼️🖥️</h4>
 
 ## Install
 
