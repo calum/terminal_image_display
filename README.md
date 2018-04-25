@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://calum.github.io/terminal_image_display">
+  <a href="https://github.com/calum/terminal_image_display">
     <img src="https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/termage.png" alt="Termage" height="200" />
   </a>
 </div>
