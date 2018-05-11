@@ -143,13 +143,17 @@ fn render_image(mut image: RgbImage, width: u32, height: u32) {
     let mut screen = Display::new(display_width, display_height);
     screen.clear();
 
-    let img_out = pixelate_image(&mut image, display_width, display_height);
+    let img_out = pixelate_image(&mut image, display_width, display_height * 2);
 
     for (x, y, pixel) in img_out.enumerate_pixels() {
         let rgb = pixel.to_rgb().data;
         let colour = Colour::from_rgb(rgb[0], rgb[1], rgb[2]);
 
-        screen.set_pixel(x as isize, y as isize, ' ', Colour::White, colour);
+        match y % 2 {
+            0 => screen.set_pixel(x as isize, (y/2) as isize, '▄', colour, colour),
+            1 => screen.get_mut_pixel(x as isize, ((y - 1)/2) as isize).set_colour(colour),
+            _ => println!("That shouldn't happen"),
+        }
     }
 
     screen.print();
@@ -165,7 +169,7 @@ pub fn display_image(image_filepath: &str, width: u32, height: u32) {
 pub fn display_gif(gif_filepath: &str, width: u32, height: u32) {
     // get the original gif
     let mut frames = get_gif(gif_filepath);
-    
+
     let mut modified_frames = Vec::new();
 
     // create the new reduced gif by shrinking each frame to fit
