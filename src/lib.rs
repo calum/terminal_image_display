@@ -8,8 +8,7 @@ use std::path::Path;
 use std::fs::File;
 use std::{thread, time};
 
-use image::{GenericImage, Pixel, RgbImage, gif, Frames, ImageDecoder, Frame};
-use image::{ConvertBuffer, ImageBuffer};
+use image::{ConvertBuffer, GenericImage, Pixel, RgbImage, gif, Frames, ImageDecoder};
 
 pub fn pixelate_image(img: &mut RgbImage, width: u32, height: u32) -> RgbImage {
     // Create a new ImgBuf
@@ -23,9 +22,8 @@ pub fn pixelate_image(img: &mut RgbImage, width: u32, height: u32) -> RgbImage {
 /// Opens the file and reads a gif animated image.
 /// Returns the Frames for the gif.
 pub fn get_gif(filename: &str) -> Frames {
-    let mut f = File::open(filename).expect("File not found");
-
-    let mut decoder = gif::Decoder::new(f);
+    let f = File::open(filename).expect("File not found");
+    let decoder = gif::Decoder::new(f);
 
     decoder.into_frames().expect("error decoding gif")
 }
@@ -160,7 +158,7 @@ fn render_image(mut image: RgbImage, width: u32, height: u32) {
 }
 
 pub fn display_image(image_filepath: &str, width: u32, height: u32) {
-    let mut img = get_image(image_filepath);
+    let img = get_image(image_filepath);
 
     render_image(img, width, height);
     println!("");
@@ -168,15 +166,15 @@ pub fn display_image(image_filepath: &str, width: u32, height: u32) {
 
 pub fn display_gif(gif_filepath: &str, width: u32, height: u32) {
     // get the original gif
-    let mut frames = get_gif(gif_filepath);
+    let frames = get_gif(gif_filepath);
 
     let mut modified_frames = Vec::new();
 
     // create the new reduced gif by shrinking each frame to fit
     // the terminal
-    for (i, frame) in frames.enumerate() {
+    for frame in frames {
         let delay = frame.delay().to_integer() as u64;
-        let mut image = frame.into_buffer();
+        let image = frame.into_buffer();
 
         modified_frames.push((image.clone(), delay));
 
