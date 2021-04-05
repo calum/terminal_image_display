@@ -36,8 +36,9 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-    -g, --gif <FILE>      Input animated gif filepath
-    -i, --image <FILE>    Input image filepath
+    -g, --gif <FILE>            Input animated gif filepath
+    -i, --image <FILE>          Input image filepath
+    -s, --scale <MULTIPLIER>    Scale width and height to a factor of terminal size
 ```
 
 ## Example output
