@@ -4,11 +4,6 @@ extern crate terminal_graphics;
 extern crate terminal_size;
 extern crate clap;
 
-use image::Pixel;
-
-use terminal_graphics::Display;
-use terminal_graphics::Colour;
-
 use terminal_size::{Width, Height, terminal_size};
 
 use termage::{display_image, display_gif};
