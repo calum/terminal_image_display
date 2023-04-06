@@ -28,19 +28,28 @@ fn main() {
                             .value_name("FILE")
                             .help("Input animated gif filepath")
                             .takes_value(true))
+                    .arg(Arg::with_name("scale")
+                            .short("s")
+                            .long("scale")
+                            .value_name("MULTIPLIER")
+                            .help("Scale width and height to a factor of terminal size")
+                            .takes_value(true))
                     .get_matches();
 
     let image_filepath = matches.value_of("image");
     let gif_filepath = matches.value_of("gif");
+    let scale = matches.value_of("scale")
+        .and_then(|x| x.parse::<f32>().ok())
+        .unwrap_or(1.0);
 
     let size = terminal_size();
 
     if let Some((Width(w), Height(h))) = size {
         if let Some(filepath) = image_filepath {
-            display_image(filepath, w as u32, h as u32);
+            display_image(filepath, (w as f32 * scale) as u32, (h as f32 * scale) as u32);
         } else if let Some(filepath) = gif_filepath {
             loop {
-                display_gif(filepath, w as u32, h as u32);
+                display_gif(filepath, (w as f32 * scale) as u32, (h as f32 * scale) as u32);
 
             }
         }
