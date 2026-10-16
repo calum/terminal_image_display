@@ -1,13 +1,15 @@
 [package]
 name = "termage"
-version = "1.1.1"
+version = "2.0.0"
 authors = ["Calum Forster <calumforster@live.co.uk>"]
+edition = "2021"
 readme = "README.md"
-keywords = ["terminal", "image", "view", "termage"]
+keywords = ["terminal", "image", "gif", "view", "termage"]
+categories = ["command-line-utilities", "multimedia::images"]
 repository = "https://github.com/calum/terminal_image_display"
-license = "MIT/Apache-2.0"
-description = "Display images in the terminal!"
-exclude = ["docs/*"]
+license = "MIT OR Apache-2.0"
+description = "Display images and animated gifs in the terminal!"
+exclude = ["docs/*", ".github/*", "CLAUDE.md"]
 
 [[bin]]
 name = "termage"
@@ -19,7 +21,7 @@ name = "termage"
 path = "src/lib.rs"
 
 [dependencies]
-image = "0.19.0"
-terminal_graphics = "0.1.5"
-terminal_size = "0.1.7"
-clap = "2.29.4"
+clap = { version = "4", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
+terminal_graphics = "1"
+terminal_size = "0.4"

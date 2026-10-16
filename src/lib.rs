@@ -1,193 +1,220 @@
-extern crate image;
-extern crate terminal_graphics;
+//! View images and animated gifs in the terminal, drawn with
+//! [`terminal_graphics`].
+//!
+//! Every terminal cell shows two image pixels using a half block character, so
+//! a picture keeps its proportions. Colours are matched to the 16 ANSI colours.
+//! This crate backs the `termage` command line tool, and you can use it from
+//! your own program too:
+//!
+//! ```no_run
+//! use std::path::Path;
+//!
+//! // show a picture (or play a gif) in a 80 column by 24 row area, forever
+//! termage::show(&mut std::io::stdout(), Path::new("ferris.png"), 80, 24, None)?;
+//! # Ok::<(), termage::Error>(())
+//! ```
+//!
+//! The pieces are public too: [`load_image`] and [`load_frames`] read files,
+//! [`to_display`] turns an [`image::RgbImage`] into a
+//! [`terminal_graphics::Display`], and [`fit`] works out how big the picture
+//! will be.
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
-use terminal_graphics::Display;
-use terminal_graphics::Colour;
+mod error;
+mod load;
+mod render;
 
+use std::io::{self, Write};
 use std::path::Path;
-use std::fs::File;
-use std::{thread, time};
+use std::thread;
 
-use image::{ConvertBuffer, GenericImage, Pixel, RgbImage, gif, Frames, ImageDecoder};
+pub use error::Error;
+pub use load::{is_gif, load_frames, load_image, Frame};
+pub use render::{fit, to_display};
 
-pub fn pixelate_image(img: &mut RgbImage, width: u32, height: u32) -> RgbImage {
-    // Create a new ImgBuf
-    let mut imgbuf = image::ImageBuffer::new(width, height);
+/// Used when the terminal size is unknown, for example when piping output.
+pub const DEFAULT_SIZE: (u32, u32) = (80, 24);
 
-    closest_match(&mut imgbuf, img);
-
-    imgbuf
+/// Works out how many columns and rows to draw into.
+///
+/// `width` and `height` are what the user asked for. Anything missing comes
+/// from the `terminal` size, or from [`DEFAULT_SIZE`] when that is unknown.
+/// When the height comes from the terminal one row is left free for the
+/// shell prompt. The result is never smaller than 1 by 1.
+///
+/// ```
+/// // an explicit width wins; the height is the terminal's, less a prompt row
+/// assert_eq!(termage::pick_size(Some(40), None, Some((120, 50))), (40, 49));
+/// assert_eq!(termage::pick_size(None, None, None), termage::DEFAULT_SIZE);
+/// ```
+pub fn pick_size(
+    width: Option<u32>,
+    height: Option<u32>,
+    terminal: Option<(u16, u16)>,
+) -> (u32, u32) {
+    let (terminal_cols, terminal_rows) = match terminal {
+        Some((cols, rows)) => (u32::from(cols), u32::from(rows).saturating_sub(1)),
+        None => DEFAULT_SIZE,
+    };
+    (
+        width.unwrap_or(terminal_cols).max(1),
+        height.unwrap_or(terminal_rows).max(1),
+    )
 }
 
-/// Opens the file and reads a gif animated image.
-/// Returns the Frames for the gif.
-pub fn get_gif(filename: &str) -> Frames {
-    let f = File::open(filename).expect("File not found");
-    let decoder = gif::Decoder::new(f);
-
-    decoder.into_frames().expect("error decoding gif")
-}
-
-pub fn get_image(filename: &str) -> RgbImage {
-    let img = image::open(&Path::new(filename)).unwrap();
-
-    img.to_rgb()
-}
-
-/// Downsizes the image using the closest match algorithm
-pub fn closest_match(imgbuf: &mut RgbImage, img: &mut RgbImage) {
-    // The dimensions method returns the images width and height
-    let (width, height) = img.dimensions();
-    let (out_width, out_height) = imgbuf.dimensions();
-
-    // set the variables needed to average out the pixels
-    let scale_x = (width as f32)/(out_width as f32);
-    let scale_y = (height as f32)/(out_height as f32);
-
-    // Iterate over the coordinates and pixels of the image
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let x_f32 = x as f32;
-        let y_f32 = y as f32;
-
-        let closest_pixel_x = (x_f32 * scale_x).floor() as u32;
-        let closest_pixel_y = (y_f32 * scale_y).floor() as u32;
-
-        let closest_pixel = img.get_pixel(closest_pixel_x, closest_pixel_y);
-
-        // Create an 8bit pixel of type RGB
-        *pixel = closest_pixel.clone();
-    }
-}
-
-/// Averages all rgb values of a group of pixels. Causes dimming.
-pub fn merge_pixels(imgbuf: &mut RgbImage, img: &mut RgbImage) {
-    // The dimensions method returns the images width and height
-    let (width, height) = img.dimensions();
-    let (out_width, out_height) = imgbuf.dimensions();
-
-    // set the variables needed to average out the pixels
-    let scale_x = width/out_width;
-    let scale_y = height/(out_height);
-    let num_pixels = (scale_y*scale_x) as f32;
-
-    // Iterate over the coordinates and pixels of the image
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-
-        // create a large pixel which will equal the average of all the
-        // pixels in the sub image
-        let mut big_pixel_rgb: [f32; 3] = [0.0, 0.0, 0.0];
-
-        // create the sub image of size equal to the size of the big pixel
-        let big_pixel = img.sub_image(x*scale_x, y*scale_y, scale_x, scale_y);
-
-        // average the rgb values
-        for (_, _, pixel) in big_pixel.pixels() {
-            let rgb_values = pixel.to_rgb().data;
-
-            big_pixel_rgb[0] += rgb_values[0] as f32;
-            big_pixel_rgb[1] += rgb_values[1] as f32;
-            big_pixel_rgb[2] += rgb_values[2] as f32;
-        }
-        big_pixel_rgb[0] *= 1.0/num_pixels;
-        big_pixel_rgb[1] *= 1.0/num_pixels;
-        big_pixel_rgb[2] *= 1.0/num_pixels;
-
-        // Create an 8bit pixel of type RGB
-        *pixel = image::Rgb([big_pixel_rgb[0] as u8, big_pixel_rgb[1] as u8, big_pixel_rgb[2] as u8]);
-    }
-}
-
-fn render_image(mut image: RgbImage, width: u32, height: u32) {
-    // get the image dimensions
-    let (img_width, img_height) = image.dimensions();
-    let ratio = (img_width as f32)/(img_height as f32);
-
-    let mut display_height = height;
-    let mut display_width = width;
-
-    // scale the image to the correct dimensions
-    if ratio > 1.00 {
-        display_height = ((display_width as f32)/(ratio * 2.0)).floor() as u32;
+/// Shows the image or animated gif at `path` in `out`, scaled to fit
+/// `cols` by `rows` cells.
+///
+/// A still image is drawn once. A gif with several frames is played
+/// `loops` times, or until the program is stopped if `loops` is `None`.
+/// Output is ANSI escape codes, so `out` is normally `stdout`.
+pub fn show<W: Write>(
+    out: &mut W,
+    path: &Path,
+    cols: u32,
+    rows: u32,
+    loops: Option<u32>,
+) -> Result<(), Error> {
+    if is_gif(path)? {
+        let frames = load_frames(path)?;
+        play(out, &frames, cols, rows, loops)?;
     } else {
-        display_width = 2 * ((display_height as f32) * ratio).floor() as u32;
+        let image = load_image(path)?;
+        show_image(out, &image, cols, rows)?;
     }
-
-    // scale the image up if it is too small to fit the dimensions of the terminal
-    let mut scale = 1.00;
-    if (display_width as f32)*scale > (img_width as f32) {
-        scale = (img_width as f32)/(width as f32);
-    }
-    if (display_height as f32)*scale > (img_height as f32) {
-        scale = (img_height as f32)/(height as f32);
-    }
-
-    // scale the width and height
-    display_width = ((display_width as f32)*scale).floor() as u32;
-    display_height = ((display_height as f32)*scale).floor() as u32;
-
-    // scale the display to fit the terminal:
-    scale = 1.0;
-    if (display_width as f32) * scale > (width as f32) {
-        scale = (width as f32) / (display_width as f32);
-    }
-    if (display_height as f32) * scale > (height as f32) {
-        scale = (height as f32) / (display_height as f32);
-    }
-
-    // scale the width and height
-    display_width = ((display_width as f32)*scale).floor() as u32;
-    display_height = ((display_height as f32)*scale).floor() as u32;
-
-    let mut screen = Display::new(display_width, display_height);
-    screen.clear();
-
-    let img_out = pixelate_image(&mut image, display_width, display_height * 2);
-
-    for (x, y, pixel) in img_out.enumerate_pixels() {
-        let rgb = pixel.to_rgb().data;
-        let colour = Colour::from_rgb(rgb[0], rgb[1], rgb[2]);
-
-        match y % 2 {
-            0 => screen.set_pixel(x as isize, (y/2) as isize, '▄', colour, colour),
-            1 => screen.get_mut_pixel(x as isize, ((y - 1)/2) as isize).set_colour(colour),
-            _ => println!("That shouldn't happen"),
-        }
-    }
-
-    screen.print();
+    Ok(())
 }
 
-pub fn display_image(image_filepath: &str, width: u32, height: u32) {
-    let img = get_image(image_filepath);
-
-    render_image(img, width, height);
-    println!("");
+/// Draws one picture into `out`, below whatever is already there.
+pub fn show_image<W: Write>(
+    out: &mut W,
+    image: &image::RgbImage,
+    cols: u32,
+    rows: u32,
+) -> io::Result<()> {
+    let display = to_display(image, cols, rows);
+    reserve_space(out, &display)?;
+    display.write_to(out)?;
+    out.flush()
 }
 
-pub fn display_gif(gif_filepath: &str, width: u32, height: u32) {
-    // get the original gif
-    let frames = get_gif(gif_filepath);
+/// Plays `frames` in place, `loops` times (forever if `None`), waiting each
+/// frame's delay. A single frame is just drawn once.
+pub fn play<W: Write>(
+    out: &mut W,
+    frames: &[Frame],
+    cols: u32,
+    rows: u32,
+    loops: Option<u32>,
+) -> io::Result<()> {
+    // scale every frame once up front rather than on every loop
+    let displays: Vec<_> = frames
+        .iter()
+        .map(|frame| (to_display(&frame.image, cols, rows), frame.delay))
+        .collect();
+    let Some((first, _)) = displays.first() else {
+        return Ok(());
+    };
+    reserve_space(out, first)?;
 
-    let mut modified_frames = Vec::new();
-
-    // create the new reduced gif by shrinking each frame to fit
-    // the terminal
-    for frame in frames {
-        let delay = frame.delay().to_integer() as u64;
-        let image = frame.into_buffer();
-
-        modified_frames.push((image.clone(), delay));
-
-        // display the image:
-        render_image(image.convert(), width, height);
-
-        thread::sleep(time::Duration::from_millis(delay));
-    }
-
+    let mut played = 0;
     loop {
-        for (frame, delay) in modified_frames.clone() {
-            render_image(frame.clone().convert(), width, height);
-            thread::sleep(time::Duration::from_millis(delay));
+        for (display, delay) in &displays {
+            display.write_to(out)?;
+            out.flush()?;
+            if displays.len() > 1 {
+                thread::sleep(*delay);
+            }
+        }
+        played += 1;
+        if displays.len() == 1 || loops.is_some_and(|loops| played >= loops) {
+            return Ok(());
         }
     }
 }
+
+/// Every frame starts by moving the cursor up over the last one, so make
+/// room for it first.
+fn reserve_space<W: Write>(out: &mut W, display: &terminal_graphics::Display) -> io::Result<()> {
+    out.write_all("\n".repeat(display.height() as usize).as_bytes())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{Rgb, RgbImage};
+    use std::time::Duration;
+
+    fn solid(colour: [u8; 3]) -> Frame {
+        Frame {
+            image: RgbImage::from_pixel(4, 4, Rgb(colour)),
+            delay: Duration::from_millis(1),
+        }
+    }
+
+    #[test]
+    fn pick_size_prefers_what_was_asked_for() {
+        assert_eq!(pick_size(Some(10), Some(5), Some((100, 50))), (10, 5));
+    }
+
+    #[test]
+    fn pick_size_leaves_a_row_for_the_prompt() {
+        assert_eq!(pick_size(None, None, Some((100, 50))), (100, 49));
+    }
+
+    #[test]
+    fn pick_size_falls_back_without_a_terminal() {
+        assert_eq!(pick_size(None, None, None), DEFAULT_SIZE);
+    }
+
+    #[test]
+    fn pick_size_is_never_zero() {
+        assert_eq!(pick_size(Some(0), Some(0), None), (1, 1));
+        assert_eq!(pick_size(None, None, Some((0, 0))), (1, 1));
+    }
+
+    #[test]
+    fn a_still_image_is_drawn_once_below_reserved_space() {
+        let image = RgbImage::from_pixel(4, 4, Rgb([255, 0, 0]));
+        let mut out = Vec::new();
+        show_image(&mut out, &image, 10, 10).unwrap();
+
+        let text = String::from_utf8(out).unwrap();
+        // 4x4 pixels scale to 20 columns... capped by the 10 columns we gave it
+        assert!(text.starts_with(&"\n".repeat(5)));
+        assert_eq!(text.matches('▄').count(), 10 * 5);
+    }
+
+    #[test]
+    fn frames_play_the_requested_number_of_times() {
+        let frames = [solid([255, 0, 0]), solid([0, 0, 255])];
+        let mut out = Vec::new();
+        play(&mut out, &frames, 2, 1, Some(3)).unwrap();
+
+        let text = String::from_utf8(out).unwrap();
+        // 2 frames x 3 loops, each of 2 cells
+        assert_eq!(text.matches('▄').count(), 2 * 3 * 2);
+        // space is reserved once, not per frame
+        assert_eq!(text.matches('\n').count(), 1);
+    }
+
+    #[test]
+    fn a_single_frame_is_not_looped() {
+        let mut out = Vec::new();
+        play(&mut out, &[solid([0, 255, 0])], 2, 1, None).unwrap();
+        assert_eq!(String::from_utf8(out).unwrap().matches('▄').count(), 2);
+    }
+
+    #[test]
+    fn no_frames_draws_nothing() {
+        let mut out = Vec::new();
+        play(&mut out, &[], 10, 10, None).unwrap();
+        assert!(out.is_empty());
+    }
+}
+
+// compile-check the code blocks in the README, so it can't go stale
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
