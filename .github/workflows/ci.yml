@@ -85,3 +85,92 @@ jobs:
         run: |
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
+
+  # Builds the command line tool for each platform when master has a version
+  # that has no GitHub release yet.
+  plan:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [test, coverage]
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      release: ${{ steps.plan.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "v$version already has a GitHub release, skipping"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # The file names are what `termage --update` and the install scripts download.
+  binaries:
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            suffix: .exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --release --locked --bin termage --target ${{ matrix.target }}
+      - name: Name the file
+        shell: bash
+        run: |
+          mkdir dist
+          cp "target/${{ matrix.target }}/release/termage${{ matrix.suffix }}" \
+            "dist/termage-${{ matrix.target }}${{ matrix.suffix }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: termage-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  # Creates the vX.Y.Z tag (if the publish job has not already) and a GitHub
+  # release with every binary and a checksum file. The install scripts live on
+  # the website (see pages.yml) and fetch these files.
+  release:
+    needs: [plan, publish, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: termage-*
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum termage-* > SHA256SUMS
+      - name: Create the release
+        run: |
+          gh release create "v${{ needs.plan.outputs.version }}" dist/* \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "termage ${{ needs.plan.outputs.version }}" \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -20,6 +20,43 @@ It is built on [terminal_graphics](https://crates.io/crates/terminal_graphics).
 
 ## Install
 
+### Ready-made binaries
+
+Every release on the [releases page](https://github.com/calum/terminal_image_display/releases)
+has a program for Linux (x86_64, arm64), macOS (Intel, Apple silicon) and
+Windows (x86_64), plus a `SHA256SUMS` file. The install scripts pick the right
+one for your machine.
+
+Linux and macOS:
+```text
+curl -fsSL https://calum.github.io/terminal_image_display/install.sh | sh
+```
+
+Windows (PowerShell):
+```text
+irm https://calum.github.io/terminal_image_display/install.ps1 | iex
+```
+
+The scripts install to `~/.local/bin` (Windows: `%LOCALAPPDATA%\Programs\termage`)
+and tell you if that folder is not on your `PATH`. Set `TERMAGE_INSTALL_DIR` to
+choose another folder, or `TERMAGE_VERSION` (for example `4.1.0`) to get a
+release other than the latest. To install by hand, download the file for your
+machine from the releases page, rename it `termage` and make it executable.
+
+### Staying up to date
+
+```text
+termage --update
+```
+
+downloads the newest release over the program you are running. Once a day,
+when you run termage in a terminal, it also checks for a newer release and
+prints a one line reminder on stderr (never into a pipe). Set
+`TERMAGE_NO_UPDATE_CHECK=1` to turn the reminder off. If you installed with
+Cargo, run `cargo install termage` again instead.
+
+### With Cargo
+
 You can install using [Cargo](https://crates.io/)
 ```text
 cargo install termage
@@ -38,10 +75,10 @@ $ termage --help
 
 Display any image, animated gif or video in the terminal with Termage!
 
-Usage: termage [OPTIONS] <INPUT>
+Usage: termage [OPTIONS] [INPUT]
 
 Arguments:
-  <INPUT>  The picture to show: a file or an http(s) address. PNG, JPEG, GIF, BMP and WebP images work, and animated gifs play. Videos (mp4, mkv, webm, ...) play silently if ffmpeg is installed
+  [INPUT]  The picture to show: a file or an http(s) address. PNG, JPEG, GIF, BMP and WebP images work, and animated gifs play. Videos (mp4, mkv, webm, ...) play silently if ffmpeg is installed
 
 Options:
   -w, --width <WIDTH>    Width in columns [default: the width of the terminal]
@@ -49,6 +86,7 @@ Options:
   -l, --loops <N>        Play a gif or video this many times [default: gifs until stopped, videos once]
       --fps <N>          Frames per second for video [default: 10]
   -d, --dither           Dither to make gradients and photos look smoother with only 16 colours
+      --update           Replace this program with the newest release from GitHub, then exit
   -h, --help             Print help
   -V, --version          Print version
 ```

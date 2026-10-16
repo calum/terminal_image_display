@@ -1,6 +1,6 @@
 [package]
 name = "termage"
-version = "4.0.0"
+version = "4.1.0"
 authors = ["Calum Forster <calumforster@live.co.uk>"]
 edition = "2021"
 readme = "README.md"
