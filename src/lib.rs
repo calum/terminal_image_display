@@ -1,4 +1,4 @@
-//! View images and animated gifs in the terminal, drawn with
+//! View images, animated gifs and videos in the terminal, drawn with
 //! [`terminal_graphics`].
 //!
 //! Every terminal cell shows two image pixels using a half block character, so
@@ -7,15 +7,17 @@
 //! your own program too:
 //!
 //! ```no_run
-//! use std::path::Path;
+//! use termage::Options;
 //!
-//! // show a picture (or play a gif) in a 80 column by 24 row area, forever
-//! termage::show(&mut std::io::stdout(), Path::new("ferris.png"), 80, 24, None)?;
+//! // show a picture, play a gif, or play a video (needs ffmpeg), from a
+//! // file or a web address, in an 80 column by 24 row area
+//! termage::show(&mut std::io::stdout(), "ferris.png", &Options::new(80, 24))?;
+//! termage::show(&mut std::io::stdout(), "https://example.com/cat.gif", &Options::new(80, 24))?;
 //! # Ok::<(), termage::Error>(())
 //! ```
 //!
-//! The pieces are public too: [`load_image`] and [`load_frames`] read files,
-//! [`to_display`] turns an [`image::RgbImage`] into a
+//! The pieces are public too: [`load_image`] and [`load_frames`] decode
+//! bytes, [`to_display`] turns an [`image::RgbImage`] into a
 //! [`terminal_graphics::Display`], and [`fit`] works out how big the picture
 //! will be.
 #![forbid(unsafe_code)]
@@ -24,14 +26,44 @@
 mod error;
 mod load;
 mod render;
+mod source;
+mod video;
 
 use std::io::{self, Write};
-use std::path::Path;
 use std::thread;
 
 pub use error::Error;
 pub use load::{is_gif, load_frames, load_image, Frame};
 pub use render::{fit, to_display};
+pub use source::{extension, is_url, read};
+pub use video::{is_video, play_video, DEFAULT_FPS};
+
+/// How and where to draw.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Options {
+    /// The most columns to use.
+    pub cols: u32,
+    /// The most rows to use.
+    pub rows: u32,
+    /// How many times to play a gif or video. `None` means until stopped for
+    /// a gif, and once for a video.
+    pub loops: Option<u32>,
+    /// Frames per second for video.
+    pub fps: u32,
+}
+
+impl Options {
+    /// Options for a `cols` by `rows` area, with the other settings at their
+    /// defaults.
+    pub fn new(cols: u32, rows: u32) -> Options {
+        Options {
+            cols,
+            rows,
+            loops: None,
+            fps: DEFAULT_FPS,
+        }
+    }
+}
 
 /// Used when the terminal size is unknown, for example when piping output.
 pub const DEFAULT_SIZE: (u32, u32) = (80, 24);
@@ -63,25 +95,34 @@ pub fn pick_size(
     )
 }
 
-/// Shows the image or animated gif at `path` in `out`, scaled to fit
-/// `cols` by `rows` cells.
+/// Shows the image, animated gif or video at `input` in `out`.
 ///
-/// A still image is drawn once. A gif with several frames is played
-/// `loops` times, or until the program is stopped if `loops` is `None`.
+/// `input` is a file path or an `http://` / `https://` address. A still image
+/// is drawn once. A gif with several frames is played `options.loops` times,
+/// or until the program is stopped if that is `None`. A video (recognised by
+/// its file extension, see [`is_video`]) is played with `ffmpeg`, once unless
+/// `options.loops` says otherwise.
+///
 /// Output is ANSI escape codes, so `out` is normally `stdout`.
-pub fn show<W: Write>(
-    out: &mut W,
-    path: &Path,
-    cols: u32,
-    rows: u32,
-    loops: Option<u32>,
-) -> Result<(), Error> {
-    if is_gif(path)? {
-        let frames = load_frames(path)?;
-        play(out, &frames, cols, rows, loops)?;
+pub fn show<W: Write>(out: &mut W, input: &str, options: &Options) -> Result<(), Error> {
+    if is_video(input) {
+        return play_video(
+            out,
+            input,
+            options.cols,
+            options.rows,
+            options.fps,
+            options.loops.unwrap_or(1),
+        );
+    }
+
+    let bytes = read(input)?;
+    if is_gif(&bytes) {
+        let frames = load_frames(&bytes)?;
+        play(out, &frames, options.cols, options.rows, options.loops)?;
     } else {
-        let image = load_image(path)?;
-        show_image(out, &image, cols, rows)?;
+        let image = load_image(&bytes)?;
+        show_image(out, &image, options.cols, options.rows)?;
     }
     Ok(())
 }

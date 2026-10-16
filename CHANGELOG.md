@@ -1,5 +1,33 @@
 # Changelog
 
+## 3.0.0
+
+Web addresses, video and a gif logo. The library functions now work on bytes and
+text inputs so they can read from more than files, which breaks the 2.0 library
+API (the command line is unchanged, apart from what is added).
+
+### Breaking changes (library)
+
+| 2.0 | 3.0 |
+| --- | --- |
+| `show(&mut out, path: &Path, cols, rows, loops)` | `show(&mut out, input: &str, &Options { loops, ..Options::new(cols, rows) })`; `input` is a path or an http(s) address |
+| `load_image(path: &Path)` | `load_image(&read(input)?)` (decodes bytes) |
+| `load_frames(path: &Path)` | `load_frames(&read(input)?)` (decodes bytes) |
+| `is_gif(path: &Path) -> Result<bool, Error>` | `is_gif(&bytes) -> bool` |
+| `Error` has `Io` and `Image` | also `Download` and `Video`: match with a wildcard arm |
+
+### Added
+
+- Images and gifs can be loaded from web addresses:
+  `termage https://example.com/cat.gif`. Downloads over 100 MB are refused.
+- Video playback: `termage clip.mp4` (mp4, mkv, webm, mov, avi and more), using
+  `ffmpeg` if it is installed, with `--fps` and `--loops`. Silent, and plays
+  once unless `--loops` is given.
+- `examples/render_gif.rs`, which renders a picture the way termage shows it and
+  saves a gif. The README logo is now a gif made with it.
+- `Options`, `play_video`, `is_url`, `is_video`, `read` and `extension` in the
+  library.
+
 ## 2.0.0
 
 Updated to `terminal_graphics` 1.0, and rewritten around a small, tested library
