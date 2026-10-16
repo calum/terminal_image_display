@@ -18,6 +18,7 @@ use terminal_graphics::Colour;
 
 const SITE_URL: &str = "https://calum.github.io/terminal_image_display/";
 const REPO_URL: &str = "https://github.com/calum/terminal_image_display";
+const REPO_PATH: &str = "calum/terminal_image_display";
 const WASM_PATH: &str = "target/wasm32-unknown-unknown/release/examples/web.wasm";
 const SAMPLES_DIR: &str = "docs/samples";
 
@@ -31,6 +32,103 @@ const EXAMPLES: &[(&str, &str)] = &[
     ("termage termage.gif", "the logo"),
     ("termage --help", "every option"),
 ];
+
+/// `curl -fsSL <site>/install.sh | sh` for Linux and macOS: downloads the right
+/// release file and puts it in `~/.local/bin` (or `$TERMAGE_INSTALL_DIR`).
+const INSTALL_SH: &str = r####"#!/bin/sh
+# Installs termage from the latest GitHub release.
+#   curl -fsSL {{SITE_URL}}install.sh | sh
+# TERMAGE_INSTALL_DIR chooses the folder (default ~/.local/bin) and
+# TERMAGE_VERSION a release other than the latest (for example 4.1.0).
+set -eu
+
+repo="{{REPO}}"
+dir="${TERMAGE_INSTALL_DIR:-$HOME/.local/bin}"
+
+case "$(uname -s)" in
+  Linux) os=unknown-linux-gnu ;;
+  Darwin) os=apple-darwin ;;
+  *) echo "termage: no release for $(uname -s); try: cargo install termage" >&2; exit 1 ;;
+esac
+case "$(uname -m)" in
+  x86_64 | amd64) arch=x86_64 ;;
+  aarch64 | arm64) arch=aarch64 ;;
+  *) echo "termage: no release for $(uname -m); try: cargo install termage" >&2; exit 1 ;;
+esac
+
+file="termage-$arch-$os"
+if [ -n "${TERMAGE_VERSION:-}" ]; then
+  url="https://github.com/$repo/releases/download/v${TERMAGE_VERSION#v}/$file"
+else
+  url="https://github.com/$repo/releases/latest/download/$file"
+fi
+
+mkdir -p "$dir"
+tmp="$dir/.termage.download"
+echo "Downloading $url"
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL "$url" -o "$tmp"
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO "$tmp" "$url"
+else
+  echo "termage: curl or wget is needed to download" >&2
+  exit 1
+fi
+chmod +x "$tmp"
+mv -f "$tmp" "$dir/termage"
+
+echo "Installed termage to $dir/termage"
+case ":$PATH:" in
+  *":$dir:"*) ;;
+  *) echo "Add it to your PATH:  export PATH=\"$dir:\$PATH\"" ;;
+esac
+"####;
+
+/// `irm <site>/install.ps1 | iex` for Windows PowerShell: installs to
+/// `%LOCALAPPDATA%\Programs\termage` and adds that folder to the user's PATH.
+const INSTALL_PS1: &str = r####"# Installs termage from the latest GitHub release.
+#   irm {{SITE_URL}}install.ps1 | iex
+# $env:TERMAGE_INSTALL_DIR chooses the folder and $env:TERMAGE_VERSION a
+# release other than the latest (for example 4.1.0).
+$ErrorActionPreference = 'Stop'
+
+$repo = '{{REPO}}'
+$dir = if ($env:TERMAGE_INSTALL_DIR) { $env:TERMAGE_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\termage' }
+
+if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
+    throw "termage: no release for $env:PROCESSOR_ARCHITECTURE; try: cargo install termage"
+}
+$file = 'termage-x86_64-pc-windows-msvc.exe'
+if ($env:TERMAGE_VERSION) {
+    $url = "https://github.com/$repo/releases/download/v$($env:TERMAGE_VERSION.TrimStart('v'))/$file"
+} else {
+    $url = "https://github.com/$repo/releases/latest/download/$file"
+}
+
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+Write-Host "Downloading $url"
+Invoke-WebRequest -Uri $url -OutFile (Join-Path $dir 'termage.exe') -UseBasicParsing
+Write-Host "Installed termage to $dir\termage.exe"
+
+$user = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (($user -split ';') -notcontains $dir) {
+    [Environment]::SetEnvironmentVariable('Path', "$user;$dir", 'User')
+    Write-Host 'Added it to your PATH. Open a new terminal to use termage.'
+}
+"####;
+
+/// The install scripts with the repo and site addresses filled in.
+fn install_scripts() -> [(&'static str, String); 2] {
+    let fill = |script: &str| {
+        script
+            .replace("{{SITE_URL}}", SITE_URL)
+            .replace("{{REPO}}", REPO_PATH)
+    };
+    [
+        ("install.sh", fill(INSTALL_SH)),
+        ("install.ps1", fill(INSTALL_PS1)),
+    ]
+}
 
 const PAGE: &str = r####"<!DOCTYPE html>
 <html lang="en">
@@ -683,6 +781,9 @@ fn build_site(out: &Path, wasm: &Path, samples: &Path, shots: &Path) -> std::io:
     let names = sample_names(samples)?;
     fs::write(out.join("index.html"), build_page(&names))?;
     fs::write(out.join(".nojekyll"), "")?;
+    for (name, script) in install_scripts() {
+        fs::write(out.join(name), script)?;
+    }
     copy_dir(samples, &out.join("samples"))?;
     copy_dir(shots, &out.join("shots"))?;
     if wasm.exists() {
@@ -789,6 +890,50 @@ mod tests {
         fs::remove_dir_all(&dir).unwrap();
     }
 
+    const ASSETS: &[&str] = &[
+        "termage-x86_64-unknown-linux-gnu",
+        "termage-aarch64-unknown-linux-gnu",
+        "termage-x86_64-apple-darwin",
+        "termage-aarch64-apple-darwin",
+        "termage-x86_64-pc-windows-msvc.exe",
+    ];
+
+    #[test]
+    fn the_install_scripts_have_everything_filled_in() {
+        for (name, script) in install_scripts() {
+            assert!(!script.contains("{{"), "{name} has a placeholder left");
+            assert!(script.contains(REPO_PATH), "{name}");
+            assert!(script.contains("releases/latest/download/"), "{name}");
+            assert!(script.contains("TERMAGE_VERSION"), "{name}");
+        }
+    }
+
+    #[test]
+    fn the_shell_script_picks_the_release_file_for_every_unix_machine() {
+        let [(_, sh), _] = install_scripts();
+        assert!(sh.starts_with("#!/bin/sh\n"));
+        assert!(sh.contains("set -eu"));
+        assert!(!sh.contains('\r'), "a carriage return breaks sh");
+        for (arch, os) in [
+            ("x86_64", "unknown-linux-gnu"),
+            ("aarch64", "unknown-linux-gnu"),
+            ("x86_64", "apple-darwin"),
+            ("aarch64", "apple-darwin"),
+        ] {
+            assert!(sh.contains(&format!("arch={arch}")), "{arch}");
+            assert!(sh.contains(&format!("os={os}")), "{os}");
+            assert!(ASSETS.contains(&format!("termage-{arch}-{os}").as_str()));
+        }
+        assert!(sh.contains(r#"file="termage-$arch-$os""#));
+    }
+
+    #[test]
+    fn the_powershell_script_downloads_the_windows_release_file() {
+        let [_, (_, ps1)] = install_scripts();
+        assert!(ps1.contains(ASSETS[4]));
+        assert!(ps1.contains("LOCALAPPDATA"));
+    }
+
     #[test]
     fn the_site_is_written_with_and_without_the_module() {
         let dir = std::env::temp_dir().join(format!("termage_site_{}", std::process::id()));
@@ -803,6 +948,8 @@ mod tests {
         let out = dir.join("out");
         assert!(!build_site(&out, &wasm, &samples, &shots).unwrap());
         assert!(out.join("index.html").exists());
+        assert!(out.join("install.sh").exists());
+        assert!(out.join("install.ps1").exists());
         assert!(out.join("samples/pic.png").exists());
         assert!(out.join("shots/shot.png").exists());
         assert!(!out.join("termage.wasm").exists());

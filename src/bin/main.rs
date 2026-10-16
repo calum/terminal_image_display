@@ -1,7 +1,9 @@
-use std::io::{self, ErrorKind};
+use std::io::{self, ErrorKind, IsTerminal};
 use std::process::ExitCode;
 
 use clap::Parser;
+mod update;
+
 use termage::{pick_size, show, Error, Options, DEFAULT_FPS};
 
 /// Display any image, animated gif or video in the terminal with Termage!
@@ -11,7 +13,8 @@ struct Cli {
     /// The picture to show: a file or an http(s) address. PNG, JPEG, GIF, BMP
     /// and WebP images work, and animated gifs play. Videos (mp4, mkv, webm,
     /// ...) play silently if ffmpeg is installed.
-    input: String,
+    #[arg(required_unless_present = "update")]
+    input: Option<String>,
 
     /// Width in columns [default: the width of the terminal]
     #[arg(short, long)]
@@ -32,10 +35,40 @@ struct Cli {
     /// Dither to make gradients and photos look smoother with only 16 colours
     #[arg(short, long)]
     dither: bool,
+
+    /// Replace this program with the newest release from GitHub, then exit
+    #[arg(long)]
+    update: bool,
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let current = update::parse_version(env!("CARGO_PKG_VERSION")).unwrap_or_default();
+
+    if cli.update {
+        return match update::run(current) {
+            Ok(message) => {
+                println!("{message}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("termage: update failed: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    // clap guarantees an input unless `--update` was given
+    let Some(input) = cli.input else {
+        return ExitCode::FAILURE;
+    };
+
+    // only nag people at a terminal, never pipes or scripts
+    if io::stderr().is_terminal() {
+        if let Some(message) = update::check(current) {
+            eprintln!("{message}");
+        }
+    }
+
     let terminal = terminal_size::terminal_size().map(|(w, h)| (w.0, h.0));
     let (cols, rows) = pick_size(cli.width, cli.height, terminal);
     let options = Options::new(cols, rows)
@@ -43,12 +76,12 @@ fn main() -> ExitCode {
         .with_fps(cli.fps)
         .with_dither(cli.dither);
 
-    match show(&mut io::stdout(), &cli.input, &options) {
+    match show(&mut io::stdout(), &input, &options) {
         Ok(()) => ExitCode::SUCCESS,
         // `termage pic.png | head` closing the pipe is not worth an error
         Err(Error::Io(error)) if error.kind() == ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("termage: {}: {error}", cli.input);
+            eprintln!("termage: {input}: {error}");
             ExitCode::FAILURE
         }
     }

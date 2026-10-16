@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.1.0
+
+Ready-made programs on GitHub, install scripts, and a way to keep termage
+current. There are no library changes.
+
+### Added
+
+- GitHub releases with a program for Linux (x86_64, arm64), macOS (Intel, Apple
+  silicon) and Windows (x86_64), and a `SHA256SUMS` file. CI builds and
+  publishes them, and creates the `vX.Y.Z` tag, when a new version reaches
+  `master`.
+- Install scripts, `install.sh` and `install.ps1`, served from the website
+  (generated from Rust like the rest of it). See the README for the one line
+  commands.
+- `termage --update` replaces the running program with the newest release.
+- Once a day, when run in a terminal, termage checks for a newer release and
+  prints a one line reminder on stderr. Set `TERMAGE_NO_UPDATE_CHECK=1` to turn
+  it off.
+- `INPUT` is no longer required when `--update` is given.
+
 ## 4.0.0
 
 A website with a terminal you can try in the browser, dithering, and sharper

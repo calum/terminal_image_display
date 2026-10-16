@@ -312,3 +312,100 @@ fn dithering_mixes_colours_for_in_between_shades() {
     assert_eq!(colours(&plain), 1);
     assert!(colours(&dithered) > 1);
 }
+
+#[cfg(feature = "net")]
+/// A stand-in for the GitHub release pages: `/latest` says which version is
+/// newest, and anything under `/download/` is the new program.
+fn serve_releases(latest: &'static str, program: &'static [u8]) -> String {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let mut request = [0u8; 2048];
+            let read = stream.read(&mut request).unwrap_or(0);
+            let request = String::from_utf8_lossy(&request[..read]).to_string();
+            let body = if request.starts_with("GET /latest") {
+                format!("{{\"tag_name\": \"{latest}\"}}").into_bytes()
+            } else if request.starts_with("GET /download/") {
+                program.to_vec()
+            } else {
+                Vec::new()
+            };
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(&body);
+        }
+    });
+    format!("http://{address}")
+}
+
+#[cfg(feature = "net")]
+/// Runs a copy of termage (so updating cannot damage the one under test).
+fn termage_copy(dir: &TempDir, base: &str, args: &[&str]) -> (PathBuf, Output) {
+    let copy = dir.path(if cfg!(windows) {
+        "termage.exe"
+    } else {
+        "termage"
+    });
+    fs::copy(env!("CARGO_BIN_EXE_termage"), &copy).unwrap();
+    let output = Command::new(&copy)
+        .args(args)
+        .env("TERMAGE_UPDATE_BASE", base)
+        .output()
+        .expect("failed to run termage");
+    (copy, output)
+}
+
+#[cfg(feature = "net")]
+#[test]
+fn update_replaces_the_program_with_the_newest_release() {
+    let dir = TempDir::new("update");
+    let base = serve_releases("v99.0.0", b"the new termage");
+
+    let (copy, output) = termage_copy(&dir, &base, &["--update"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(stdout(&output).contains("to 99.0.0"), "{}", stdout(&output));
+    assert_eq!(fs::read(&copy).unwrap(), b"the new termage");
+    // Windows cannot delete the program while it is still running, so the old
+    // copy stays as `termage.old` until the next update; elsewhere nothing is left
+    let leftovers = if cfg!(windows) { 2 } else { 1 };
+    assert_eq!(fs::read_dir(&dir.0).unwrap().count(), leftovers);
+}
+
+#[cfg(feature = "net")]
+#[test]
+fn update_leaves_the_program_alone_when_it_is_already_the_newest() {
+    let dir = TempDir::new("current");
+    let base = serve_releases("v0.0.1", b"an older termage");
+
+    let (copy, output) = termage_copy(&dir, &base, &["--update"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(stdout(&output).contains("already up to date"));
+    assert_eq!(
+        fs::read(&copy).unwrap(),
+        fs::read(env!("CARGO_BIN_EXE_termage")).unwrap()
+    );
+}
+
+#[cfg(feature = "net")]
+#[test]
+fn update_reports_a_failure_in_one_line() {
+    let dir = TempDir::new("offline");
+
+    // port 1 on localhost: nothing listens there
+    let (copy, output) = termage_copy(&dir, "http://127.0.0.1:1", &["--update"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).starts_with("termage: update failed:"));
+    assert_eq!(
+        fs::read(&copy).unwrap(),
+        fs::read(env!("CARGO_BIN_EXE_termage")).unwrap()
+    );
+}
