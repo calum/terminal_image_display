@@ -25,17 +25,23 @@ exit with status 1, instead of panicking.
 
 | 1.x | 2.0 |
 | --- | --- |
-| `display_image(path, w, h)` | `show(&mut stdout, path, w, h, None)?` (also plays gifs) |
-| `display_gif(path, w, h)` | `show(&mut stdout, path, w, h, loops)?` |
-| `get_image(path) -> RgbImage` (panicked) | `load_image(path) -> Result<RgbImage, Error>` |
-| `get_gif(path) -> Frames` (panicked) | `load_frames(path) -> Result<Vec<Frame>, Error>` |
+| `display_image(path, w, h)` | `show(&mut stdout, path, &Options::new(w, h))?` (also plays gifs and videos) |
+| `display_gif(path, w, h)` | `show(&mut stdout, path, &Options { loops, ..Options::new(w, h) })?` |
+| `get_image(path) -> RgbImage` (panicked) | `load_image(&read(path)?)` (decodes bytes, returns a `Result`) |
+| `get_gif(path) -> Frames` (panicked) | `load_frames(&read(path)?)` (returns `Result<Vec<Frame>, Error>`) |
 | `pixelate_image`, `closest_match`, `merge_pixels` | removed: scaling uses the `image` crate's filters (`to_display`) |
 | `image` 0.19, `terminal_graphics` 0.1, `clap` 2 | `image` 0.25, `terminal_graphics` 1, `clap` 4 |
 
 ### Added
 
-- `--width`, `--height` and `--loops` options, and `--version` from Cargo.
-- `show`, `show_image`, `play`, `fit`, `to_display`, `pick_size`, `is_gif`,
+- Images and gifs can be loaded from web addresses: `termage https://example.com/cat.gif`.
+- Video playback: `termage clip.mp4` (mp4, mkv, webm, mov, avi and more), using
+  `ffmpeg` if it is installed, with `--fps` and `--loops`. Silent.
+- `examples/render_gif.rs`, which renders a picture the way termage shows it and
+  saves a gif. The README logo is now a gif made with it.
+- `--width`, `--height`, `--loops` and `--fps` options, and `--version` from Cargo.
+- `show`, `Options`, `show_image`, `play`, `play_video`, `fit`, `to_display`,
+  `pick_size`, `is_gif`, `is_url`, `is_video`, `read`, `extension`,
   `Frame` and `Error` in the library.
 - WebP and BMP support (and PNG, JPEG and GIF as before).
 - Tests (unit, integration and end to end), CI, a docs build, and automatic

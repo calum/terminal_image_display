@@ -1,8 +1,6 @@
-//! Reading images and animated gifs from disk.
+//! Reading images and animated gifs.
 
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
+use std::io::Cursor;
 use std::time::Duration;
 
 use image::codecs::gif::GifDecoder;
@@ -24,24 +22,25 @@ pub struct Frame {
     pub delay: Duration,
 }
 
-/// Whether the file at `path` is a gif, going by its contents rather than its
-/// name.
-pub fn is_gif(path: &Path) -> Result<bool, Error> {
-    let reader = ImageReader::open(path)?.with_guessed_format()?;
-    Ok(reader.format() == Some(ImageFormat::Gif))
+/// Whether `bytes` (the contents of a file) are a gif, going by the contents
+/// rather than a file name.
+pub fn is_gif(bytes: &[u8]) -> bool {
+    image::guess_format(bytes).is_ok_and(|format| format == ImageFormat::Gif)
 }
 
-/// Loads any still image the `image` crate can decode (PNG, JPEG, GIF, BMP
+/// Decodes any still image the `image` crate can read (PNG, JPEG, GIF, BMP
 /// and WebP). Transparent pixels become black. For an animated gif this is
 /// the first frame.
-pub fn load_image(path: &Path) -> Result<RgbImage, Error> {
-    let image = ImageReader::open(path)?.with_guessed_format()?.decode()?;
+pub fn load_image(bytes: &[u8]) -> Result<RgbImage, Error> {
+    let image = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()?
+        .decode()?;
     Ok(flatten(&image.to_rgba8()))
 }
 
-/// Loads every frame of an animated gif.
-pub fn load_frames(path: &Path) -> Result<Vec<Frame>, Error> {
-    let decoder = GifDecoder::new(BufReader::new(File::open(path)?))?;
+/// Decodes every frame of an animated gif.
+pub fn load_frames(bytes: &[u8]) -> Result<Vec<Frame>, Error> {
+    let decoder = GifDecoder::new(Cursor::new(bytes))?;
     let frames = decoder.into_frames().collect_frames()?;
     Ok(frames
         .into_iter()
@@ -105,10 +104,16 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_file_is_an_io_error() {
-        let path = Path::new("definitely/not/here.png");
-        assert!(matches!(load_image(path), Err(Error::Io(_))));
-        assert!(matches!(load_frames(path), Err(Error::Io(_))));
-        assert!(matches!(is_gif(path), Err(Error::Io(_))));
+    fn bytes_that_are_not_an_image_are_a_decode_error() {
+        let junk = b"this is not a picture";
+        assert!(!is_gif(junk));
+        assert!(load_image(junk).is_err());
+        assert!(load_frames(junk).is_err());
+    }
+
+    #[test]
+    fn a_gif_header_is_recognised() {
+        assert!(is_gif(b"GIF89a\x01\x00\x01\x00"));
+        assert!(!is_gif(b"\x89PNG\r\n\x1a\n"));
     }
 }

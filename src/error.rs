@@ -10,6 +10,10 @@ pub enum Error {
     Io(io::Error),
     /// The file is not an image termage can decode.
     Image(image::ImageError),
+    /// The web address could not be downloaded.
+    Download(String),
+    /// A video could not be played (for example `ffmpeg` is not installed).
+    Video(String),
 }
 
 impl fmt::Display for Error {
@@ -17,6 +21,8 @@ impl fmt::Display for Error {
         match self {
             Error::Io(error) => write!(f, "{error}"),
             Error::Image(error) => write!(f, "could not decode the image: {error}"),
+            Error::Download(message) => write!(f, "could not download it: {message}"),
+            Error::Video(message) => write!(f, "{message}"),
         }
     }
 }
@@ -26,6 +32,7 @@ impl std::error::Error for Error {
         match self {
             Error::Io(error) => Some(error),
             Error::Image(error) => Some(error),
+            Error::Download(_) | Error::Video(_) => None,
         }
     }
 }
