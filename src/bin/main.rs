@@ -1,16 +1,17 @@
 use std::io::{self, ErrorKind};
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use termage::{pick_size, show, Error};
+use termage::{pick_size, show, Error, Options, DEFAULT_FPS};
 
-/// Display any image or animated gif in the terminal with Termage!
+/// Display any image, animated gif or video in the terminal with Termage!
 #[derive(Parser)]
 #[command(version, author = "https://github.com/calum/terminal_image_display")]
 struct Cli {
-    /// The image to show: PNG, JPEG, GIF, BMP or WebP. Animated gifs play.
-    file: PathBuf,
+    /// The picture to show: a file or an http(s) address. PNG, JPEG, GIF, BMP
+    /// and WebP images work, and animated gifs play. Videos (mp4, mkv, webm,
+    /// ...) play silently if ffmpeg is installed.
+    input: String,
 
     /// Width in columns [default: the width of the terminal]
     #[arg(short, long)]
@@ -20,22 +21,31 @@ struct Cli {
     #[arg(short = 'H', long)]
     height: Option<u32>,
 
-    /// Play an animated gif this many times [default: until stopped]
+    /// Play a gif or video this many times [default: gifs until stopped, videos once]
     #[arg(short, long, value_name = "N")]
     loops: Option<u32>,
+
+    /// Frames per second for video
+    #[arg(long, default_value_t = DEFAULT_FPS, value_name = "N")]
+    fps: u32,
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let terminal = terminal_size::terminal_size().map(|(w, h)| (w.0, h.0));
     let (cols, rows) = pick_size(cli.width, cli.height, terminal);
+    let options = Options {
+        loops: cli.loops,
+        fps: cli.fps,
+        ..Options::new(cols, rows)
+    };
 
-    match show(&mut io::stdout(), &cli.file, cols, rows, cli.loops) {
+    match show(&mut io::stdout(), &cli.input, &options) {
         Ok(()) => ExitCode::SUCCESS,
         // `termage pic.png | head` closing the pipe is not worth an error
         Err(Error::Io(error)) if error.kind() == ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("termage: {}: {error}", cli.file.display());
+            eprintln!("termage: {}: {error}", cli.input);
             ExitCode::FAILURE
         }
     }
