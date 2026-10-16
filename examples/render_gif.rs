@@ -2,7 +2,7 @@
 //! saves the result as a new gif. That is how the README logo is made.
 //!
 //! ```text
-//! cargo run --example render_gif -- INPUT OUTPUT [COLS] [ROWS] [SCALE]
+//! cargo run --example render_gif -- INPUT OUTPUT [COLS] [ROWS] [SCALE] [--dither]
 //! ```
 //!
 //! `INPUT` is a file or web address. The picture is fitted into `COLS` by
@@ -14,7 +14,7 @@ use std::process::ExitCode;
 
 use image::codecs::gif::{GifEncoder, Repeat};
 use image::{Delay, Frame as GifFrame, Rgb, RgbImage, RgbaImage};
-use termage::{load_frames, load_image, read, to_display, Frame};
+use termage::{load_frames, load_image, read, Frame, Options};
 use terminal_graphics::Display;
 
 /// Draws a display as pixels: each cell is `scale` wide and `2 * scale`
@@ -41,14 +41,21 @@ fn rasterise(display: &Display, scale: u32) -> RgbaImage {
 }
 
 fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let [input, output, rest @ ..] = args else {
-        return Err("usage: render_gif INPUT OUTPUT [COLS] [ROWS] [SCALE]".into());
+    let dither = args.iter().any(|arg| arg == "--dither");
+    let args: Vec<String> = args
+        .iter()
+        .filter(|arg| *arg != "--dither")
+        .cloned()
+        .collect();
+    let [input, output, rest @ ..] = args.as_slice() else {
+        return Err("usage: render_gif INPUT OUTPUT [COLS] [ROWS] [SCALE] [--dither]".into());
     };
     let number = |index: usize, default: u32| -> Result<u32, Box<dyn std::error::Error>> {
         rest.get(index)
             .map_or(Ok(default), |text| Ok(text.parse::<u32>()?.max(1)))
     };
     let (cols, rows, scale) = (number(0, 80)?, number(1, 30)?, number(2, 8)?);
+    let options = Options::new(cols, rows).with_dither(dither);
 
     let bytes = read(input)?;
     let frames = if termage::is_gif(&bytes) {
@@ -60,10 +67,17 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }]
     };
 
+    // a still picture saved as .png stays a png
+    if frames.len() == 1 && output.to_ascii_lowercase().ends_with(".png") {
+        rasterise(&options.display(&frames[0].image), scale).save(output)?;
+        println!("wrote {output}");
+        return Ok(());
+    }
+
     let mut encoder = GifEncoder::new(File::create(output)?);
     encoder.set_repeat(Repeat::Infinite)?;
     for frame in &frames {
-        let picture = rasterise(&to_display(&frame.image, cols, rows), scale);
+        let picture = rasterise(&options.display(&frame.image), scale);
         let delay = Delay::from_numer_denom_ms(frame.delay.as_millis() as u32, 1);
         encoder.encode_frame(GifFrame::from_parts(picture, 0, 0, delay))?;
     }
@@ -99,6 +113,36 @@ mod tests {
         let blue = Colour::BrightBlue.rgb();
         assert_eq!(image.get_pixel(1, 1), &Rgba([red.0, red.1, red.2, 255]));
         assert_eq!(image.get_pixel(0, 2), &Rgba([blue.0, blue.1, blue.2, 255]));
+    }
+
+    #[test]
+    fn a_still_picture_can_be_saved_as_a_png() {
+        let dir = std::env::temp_dir().join(format!("termage_render_png_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("in.png");
+        let output = dir.join("out.png");
+        RgbImage::from_pixel(8, 8, Rgb([0, 0, 255]))
+            .save(&input)
+            .unwrap();
+
+        let args = [input, output.clone()].map(|p| p.to_str().unwrap().to_string());
+        run(&[
+            args[0].clone(),
+            args[1].clone(),
+            "4".into(),
+            "2".into(),
+            "2".into(),
+        ])
+        .unwrap();
+
+        let bytes = std::fs::read(&output).unwrap();
+        assert_eq!(
+            image::guess_format(&bytes).unwrap(),
+            image::ImageFormat::Png
+        );
+        // 4 columns by 2 rows at scale 2 is 8 by 8 pixels
+        assert_eq!(image::load_from_memory(&bytes).unwrap().width(), 8);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

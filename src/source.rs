@@ -6,6 +6,7 @@ use std::path::Path;
 use crate::Error;
 
 /// Downloads bigger than this are refused, so a wrong link cannot fill memory.
+#[cfg(feature = "net")]
 const MAX_DOWNLOAD_BYTES: u64 = 100 * 1024 * 1024;
 
 /// Whether `input` is a web address (`http://` or `https://`) rather than a
@@ -52,6 +53,7 @@ pub fn read(input: &str) -> Result<Vec<u8>, Error> {
     }
 }
 
+#[cfg(feature = "net")]
 fn download(url: &str) -> Result<Vec<u8>, Error> {
     let fail = |error: &dyn std::fmt::Display| Error::Download(format!("{error}"));
     let mut response = ureq::get(url).call().map_err(|error| fail(&error))?;
@@ -61,6 +63,13 @@ fn download(url: &str) -> Result<Vec<u8>, Error> {
         .limit(MAX_DOWNLOAD_BYTES)
         .read_to_vec()
         .map_err(|error| fail(&error))
+}
+
+#[cfg(not(feature = "net"))]
+fn download(_url: &str) -> Result<Vec<u8>, Error> {
+    Err(Error::Download(
+        "this build of termage has no network support (the `net` feature)".to_string(),
+    ))
 }
 
 #[cfg(test)]

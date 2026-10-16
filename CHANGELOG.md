@@ -1,5 +1,51 @@
 # Changelog
 
+## 4.0.0
+
+A website with a terminal you can try in the browser, dithering, and sharper
+screenshots. The library API changed, so this is a major version (the command
+line only gains options).
+
+### Breaking changes (library)
+
+`Options` now carries every setting (including the new `dither`), so the
+functions that took loose size and loop arguments take it instead. `Options` is
+`#[non_exhaustive]`, so more settings can be added later without another major
+version: build it with `Options::new` and the `with_*` methods.
+
+| 3.0 | 4.0 |
+| --- | --- |
+| `show_image(&mut out, &image, cols, rows)` | `show_image(&mut out, &image, &Options::new(cols, rows))` |
+| `play(&mut out, &frames, cols, rows, loops)` | `play(&mut out, &frames, &Options::new(cols, rows).with_loops(loops))` |
+| `play_video(&mut out, input, cols, rows, fps, loops)` | `play_video(&mut out, input, &Options::new(cols, rows).with_fps(fps).with_loops(Some(loops)))` |
+| `Options { cols, rows, loops, fps }` (struct literal) | `Options::new(cols, rows).with_loops(loops).with_fps(fps)` |
+
+### Added
+
+- `--dither` / `-d`: Floyd-Steinberg dithering, so gradients, skies and photos
+  look far better with only 16 colours. Also `Options::with_dither` and
+  `to_display_dithered`.
+- A website, <https://calum.github.io/terminal_image_display/>, with a terminal
+  running the real library as WebAssembly: example commands, and drag and drop
+  for your own images, gifs and video. It is generated from Rust
+  (`examples/build_site.rs`, `examples/web.rs`) and deployed by
+  `.github/workflows/pages.yml`.
+- A `net` cargo feature (on by default) for loading from web addresses. Build
+  with `default-features = false` to drop the HTTP client, which is needed to
+  compile for WebAssembly.
+- `flatten` and `Options::display` in the library.
+- `examples/make_samples.rs` draws the sample pictures in `docs/samples`
+  (a transparent PNG, a JPEG, a detailed PNG and two animated gifs).
+  `examples/render_gif.rs` can now save a png, and takes `--dither`.
+- A repo hygiene test: only Rust and a short list of config and image files are
+  committed.
+
+### Changed
+
+- The README logo and example screenshots were regenerated from scratch at a
+  much higher resolution, and show off transparency, JPEG, fine detail,
+  dithering and animation.
+
 ## 3.0.0
 
 Web addresses, video and a gif logo. The library functions now work on bytes and

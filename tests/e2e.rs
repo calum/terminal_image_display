@@ -164,6 +164,7 @@ fn running_without_a_file_explains_how_to_use_it() {
     assert!(stderr(&output).contains("Usage"));
 }
 
+#[cfg(feature = "net")]
 /// Serves `body` once over HTTP on a free local port and returns the address.
 fn serve_once(status: &'static str, body: Vec<u8>, content_type: &'static str) -> String {
     use std::io::{Read, Write};
@@ -183,6 +184,7 @@ fn serve_once(status: &'static str, body: Vec<u8>, content_type: &'static str) -
     format!("http://{address}")
 }
 
+#[cfg(feature = "net")]
 #[test]
 fn shows_an_image_from_a_web_address() {
     let dir = TempDir::new("url");
@@ -198,6 +200,7 @@ fn shows_an_image_from_a_web_address() {
     assert!(stdout(&output).contains("\x1b[94;104m▄"));
 }
 
+#[cfg(feature = "net")]
 #[test]
 fn plays_a_gif_from_a_web_address() {
     let dir = TempDir::new("urlgif");
@@ -210,6 +213,7 @@ fn plays_a_gif_from_a_web_address() {
     assert_eq!(stdout(&output).matches('▄').count(), 2 * 2);
 }
 
+#[cfg(feature = "net")]
 #[test]
 fn a_web_address_that_fails_is_a_clean_error() {
     let url = serve_once("404 Not Found", b"nope".to_vec(), "text/plain");
@@ -221,6 +225,7 @@ fn a_web_address_that_fails_is_a_clean_error() {
     assert!(!message.contains("panicked"));
 }
 
+#[cfg(feature = "net")]
 #[test]
 fn a_web_page_that_is_not_an_image_is_a_clean_error() {
     let url = serve_once("200 OK", b"<html>hi</html>".to_vec(), "text/html");
@@ -284,4 +289,26 @@ fn plays_a_video_when_ffmpeg_is_installed() {
         count >= cells * 4 && count <= cells * 6,
         "{count} cells drawn"
     );
+}
+
+#[test]
+fn dithering_mixes_colours_for_in_between_shades() {
+    let dir = TempDir::new("dither");
+    let png = dir.path("grey.png");
+    RgbImage::from_pixel(16, 16, Rgb([106, 106, 106]))
+        .save(&png)
+        .unwrap();
+    let path = png.to_str().unwrap();
+
+    let plain = stdout(&termage(&[path, "-w", "16", "-H", "8"]));
+    let dithered = stdout(&termage(&[path, "-w", "16", "-H", "8", "--dither"]));
+
+    let colours = |text: &str| {
+        let mut codes: Vec<&str> = text.split('\x1b').filter(|s| s.ends_with("▄")).collect();
+        codes.sort();
+        codes.dedup();
+        codes.len()
+    };
+    assert_eq!(colours(&plain), 1);
+    assert!(colours(&dithered) > 1);
 }

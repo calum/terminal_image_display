@@ -60,8 +60,8 @@ fn delay_of((numerator, denominator): (u32, u32)) -> Duration {
     }
 }
 
-/// Blends transparent pixels onto black.
-fn flatten(image: &RgbaImage) -> RgbImage {
+/// Blends transparent pixels onto black, giving a picture with no alpha.
+pub fn flatten(image: &RgbaImage) -> RgbImage {
     let mut flat = RgbImage::new(image.width(), image.height());
     for (x, y, pixel) in image.enumerate_pixels() {
         let [red, green, blue, alpha] = pixel.0;
