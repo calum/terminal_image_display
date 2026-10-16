@@ -156,9 +156,40 @@ const PAGE: &str = r####"<!DOCTYPE html>
 <a href="https://docs.rs/termage">[ docs.rs ]</a>
 </p>
 
-<pre class="prompt"><span class="c10">$</span> cargo install termage<span class="cursor">_</span></pre>
+<p class="nav"><a href="#install">[ Install ]</a> <a href="#try">[ Try it ]</a></p>
 
-<section>
+<section id="install">
+<h2>&gt; INSTALL</h2>
+<p>Pick one. Every option gives you the same <code>termage</code> command.</p>
+<div class="installs">
+<div class="install">
+<h3 class="c10">LINUX / MACOS</h3>
+<p class="dim">Downloads the right program for your machine. x86_64 and arm64.</p>
+<pre class="prompt"><span class="c10">$</span> <span class="cmd">curl -fsSL {{SITE_URL}}install.sh | sh</span></pre>
+<button type="button" class="copy" data-copy="curl -fsSL {{SITE_URL}}install.sh | sh">COPY</button>
+</div>
+<div class="install">
+<h3 class="c11">WINDOWS</h3>
+<p class="dim">In PowerShell. Adds termage to your PATH.</p>
+<pre class="prompt"><span class="c10">PS&gt;</span> <span class="cmd">irm {{SITE_URL}}install.ps1 | iex</span></pre>
+<button type="button" class="copy" data-copy="irm {{SITE_URL}}install.ps1 | iex">COPY</button>
+</div>
+<div class="install">
+<h3 class="c14">RUST / CARGO</h3>
+<p class="dim">Builds from source on any platform. Needs Rust.</p>
+<pre class="prompt"><span class="c10">$</span> <span class="cmd">cargo install termage</span></pre>
+<button type="button" class="copy" data-copy="cargo install termage">COPY</button>
+</div>
+<div class="install">
+<h3 class="c13">DOWNLOAD BY HAND</h3>
+<p class="dim">Grab the file for your system, rename it <code>termage</code> and make it executable. A <code>SHA256SUMS</code> file is alongside.</p>
+<p><a href="{{REPO_URL}}/releases/latest">[ Latest release ]</a></p>
+</div>
+</div>
+<p class="dim">Already installed? <code>termage --update</code> upgrades it in place. Set <code>TERMAGE_INSTALL_DIR</code> or <code>TERMAGE_VERSION</code> before the install command to choose the folder or release.</p>
+</section>
+
+<section id="try">
 <h2>&gt; TRY IT HERE</h2>
 <p>This terminal runs the real termage library, compiled to WebAssembly. Type
 a command, press a button, or <b class="c14">drag and drop your own image, gif
@@ -253,6 +284,13 @@ h2 { color: var(--c11); font-size: 18px; margin: 40px 0 8px; }
 .dim { color: var(--c8); font-size: 13px; }
 .nav a { margin-right: 12px; }
 .prompt { background: #000; border: 1px solid var(--c8); padding: 8px 12px; overflow-x: auto; }
+.installs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 12px 0; }
+.install { border: 1px solid var(--c8); padding: 8px 12px 12px; }
+.install h3 { margin: 4px 0; font-size: 16px; }
+.install p { margin: 4px 0 8px; }
+.install .prompt { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.copy { font: inherit; background: #000; color: var(--c10); border: 1px solid var(--c10); padding: 2px 10px; cursor: pointer; }
+.copy:hover, .copy:focus-visible { background: var(--c10); color: #000; text-shadow: none; }
 .cursor { animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 code { color: var(--c10); }
@@ -626,6 +664,12 @@ const JS: &str = r####"
     })
     .catch(function (error) { statusEl.textContent = "failed"; fail("could not start termage.wasm: " + error); });
 })();
+document.querySelectorAll(".copy").forEach(function (button) {
+  button.addEventListener("click", function () {
+    var done = function () { button.textContent = "COPIED"; setTimeout(function () { button.textContent = "COPY"; }, 1500); };
+    if (navigator.clipboard) { navigator.clipboard.writeText(button.dataset.copy).then(done, function () {}); }
+  });
+});
 "####;
 
 fn escape(text: &str) -> String {
@@ -897,6 +941,20 @@ mod tests {
         "termage-aarch64-apple-darwin",
         "termage-x86_64-pc-windows-msvc.exe",
     ];
+
+    #[test]
+    fn the_page_shows_every_way_to_install() {
+        let page = page();
+        assert!(page.contains(r#"id="install""#));
+        assert!(page.contains(&format!("curl -fsSL {SITE_URL}install.sh | sh")));
+        assert!(page.contains(&format!("irm {SITE_URL}install.ps1 | iex")));
+        assert!(page.contains("cargo install termage"));
+        assert!(page.contains(&format!("{REPO_URL}/releases/latest")));
+        assert!(page.contains("termage --update"));
+        // every copy button has a command to copy
+        assert_eq!(page.matches(r#"class="copy""#).count(), 3);
+        assert_eq!(page.matches("data-copy=").count(), 3);
+    }
 
     #[test]
     fn the_install_scripts_have_everything_filled_in() {
