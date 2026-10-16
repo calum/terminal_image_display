@@ -92,7 +92,7 @@ termage pika.png
 
 ```toml
 [dependencies]
-termage = "2"
+termage = "3"
 ```
 
 ```rust,no_run
@@ -107,7 +107,7 @@ fn main() -> Result<(), termage::Error> {
 
 The [API documentation](https://docs.rs/termage) covers loading, scaling
 (`fit`, `to_display`) and playing frames yourself. See the
-[CHANGELOG](CHANGELOG.md) for what changed in 2.0 if you are upgrading.
+[CHANGELOG](CHANGELOG.md) for what changed in 2.0 and 3.0 if you are upgrading.
 
 ## Links
 - crates.io: https://crates.io/crates/termage
