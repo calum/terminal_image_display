@@ -28,17 +28,20 @@ struct Cli {
     /// Frames per second for video
     #[arg(long, default_value_t = DEFAULT_FPS, value_name = "N")]
     fps: u32,
+
+    /// Dither to make gradients and photos look smoother with only 16 colours
+    #[arg(short, long)]
+    dither: bool,
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let terminal = terminal_size::terminal_size().map(|(w, h)| (w.0, h.0));
     let (cols, rows) = pick_size(cli.width, cli.height, terminal);
-    let options = Options {
-        loops: cli.loops,
-        fps: cli.fps,
-        ..Options::new(cols, rows)
-    };
+    let options = Options::new(cols, rows)
+        .with_loops(cli.loops)
+        .with_fps(cli.fps)
+        .with_dither(cli.dither);
 
     match show(&mut io::stdout(), &cli.input, &options) {
         Ok(()) => ExitCode::SUCCESS,

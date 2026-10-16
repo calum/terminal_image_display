@@ -4,18 +4,19 @@
 [![License](https://img.shields.io/crates/l/termage.svg)](#license)
 
 <div align="center">
-  <a href="https://github.com/calum/terminal_image_display">
+  <a href="https://calum.github.io/terminal_image_display/">
     <img src="https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/termage.gif" alt="Termage" height="200" />
   </a>
 </div>
 
-<h4 align="center">View images and gifs in your terminal! 🖼️🖥️</h4>
+<h4 align="center">View images, gifs and video in your terminal! 🖼️🖥️</h4>
+
+**[Try it in your browser: run example commands or drop in your own pictures](https://calum.github.io/terminal_image_display/)**
 
 Termage shows PNG, JPEG, GIF, BMP and WebP images, plays animated gifs and
 (with ffmpeg) videos, from files or web addresses, in any terminal that
 understands ANSI escape codes (Linux, macOS and Windows Terminal / PowerShell).
-It is built on
-[terminal_graphics](https://crates.io/crates/terminal_graphics).
+It is built on [terminal_graphics](https://crates.io/crates/terminal_graphics).
 
 ## Install
 
@@ -28,7 +29,7 @@ or you can clone the repo and build the binary
 ```text
 git clone https://github.com/calum/terminal_image_display
 cd terminal_image_display
-cargo run -- path/to/ferris.png
+cargo run -- docs/samples/crab.png
 ```
 
 ## Usage
@@ -47,13 +48,22 @@ Options:
   -H, --height <HEIGHT>  Height in rows [default: the height of the terminal]
   -l, --loops <N>        Play a gif or video this many times [default: gifs until stopped, videos once]
       --fps <N>          Frames per second for video [default: 10]
+  -d, --dither           Dither to make gradients and photos look smoother with only 16 colours
   -h, --help             Print help
   -V, --version          Print version
 ```
 
-The picture is scaled to fit, keeping its proportions. Transparent pixels are
-shown as black. Gifs are recognised by their contents, not their file name.
-Stop a looping gif with Ctrl-C.
+The picture is scaled to fit, keeping its proportions. Every terminal cell
+shows two pixels, one above the other, using a half block character. Transparent
+pixels are shown as black. Gifs are recognised by their contents, not their file
+name. Stop a looping gif with Ctrl-C.
+
+Terminals only have 16 colours to work with, so photos and gradients look flat.
+`--dither` mixes colours cell by cell to fake the ones in between:
+
+```text
+termage docs/samples/sunset.jpg --dither
+```
 
 ### From a web address
 
@@ -73,26 +83,42 @@ on your `PATH`; termage asks it to decode the frames. It is silent, and plays
 once unless you pass `--loops`.
 
 ## Example output
-```text
-termage ferris.png
-```
-![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/ferris_termage.png)
 
-```text
-termage pika.gif
-```
-![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/pika_termage.gif)
+These are made from the pictures in [`docs/samples`](docs/samples), which are
+drawn by code (`cargo run --example make_samples`). The screenshots show exactly
+what the terminal shows, and are made with `cargo run --example render_gif`.
 
+A transparent PNG, with `--dither`:
 ```text
-termage pika.png
+termage docs/samples/crab.png --dither
 ```
-![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/pika_termage.png)
+![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/crab.png)
+
+A JPEG, with `--dither`:
+```text
+termage docs/samples/sunset.jpg --dither
+```
+![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/sunset.png)
+
+Fine detail:
+```text
+termage docs/samples/mandelbrot.png --dither
+```
+![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/mandelbrot.png)
+
+Animated gifs:
+```text
+termage docs/samples/plasma.gif --dither
+termage docs/samples/bounce.gif --dither
+```
+![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/plasma.gif)
+![](https://raw.githubusercontent.com/calum/terminal_image_display/master/docs/screenshots/bounce.gif)
 
 ## Using it as a library
 
 ```toml
 [dependencies]
-termage = "3"
+termage = "4"
 ```
 
 ```rust,no_run
@@ -101,15 +127,19 @@ use termage::Options;
 fn main() -> Result<(), termage::Error> {
     // show a picture, play a gif or a video (needs ffmpeg); a file or a web
     // address, in an 80 column by 24 row area
-    termage::show(&mut std::io::stdout(), "ferris.png", &Options::new(80, 24))
+    let options = Options::new(80, 24).with_dither(true);
+    termage::show(&mut std::io::stdout(), "crab.png", &options)
 }
 ```
 
 The [API documentation](https://docs.rs/termage) covers loading, scaling
-(`fit`, `to_display`) and playing frames yourself. See the
-[CHANGELOG](CHANGELOG.md) for what changed in 2.0 and 3.0 if you are upgrading.
+(`fit`, `to_display`) and playing frames yourself. Turn off the default `net`
+feature (`default-features = false`) to drop the HTTP client, for example to
+compile for WebAssembly. See the [CHANGELOG](CHANGELOG.md) for what changed in
+each major version if you are upgrading.
 
 ## Links
+- Website (with a playable terminal): https://calum.github.io/terminal_image_display/
 - crates.io: https://crates.io/crates/termage
 - API documentation: https://docs.rs/termage
 - Source: https://github.com/calum/terminal_image_display

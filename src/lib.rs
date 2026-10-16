@@ -3,7 +3,8 @@
 //!
 //! Every terminal cell shows two image pixels using a half block character, so
 //! a picture keeps its proportions. Colours are matched to the 16 ANSI colours.
-//! This crate backs the `termage` command line tool, and you can use it from
+//! This crate backs the `termage` command line tool (try it in your browser at
+//! <https://calum.github.io/terminal_image_display/>), and you can use it from
 //! your own program too:
 //!
 //! ```no_run
@@ -33,13 +34,21 @@ use std::io::{self, Write};
 use std::thread;
 
 pub use error::Error;
-pub use load::{is_gif, load_frames, load_image, Frame};
-pub use render::{fit, to_display};
+pub use load::{flatten, is_gif, load_frames, load_image, Frame};
+pub use render::{fit, to_display, to_display_dithered};
 pub use source::{extension, is_url, read};
 pub use video::{is_video, play_video, DEFAULT_FPS};
 
 /// How and where to draw.
+///
+/// Build one with [`Options::new`] and the `with_*` methods:
+///
+/// ```
+/// let options = termage::Options::new(80, 24).with_loops(Some(2)).with_dither(true);
+/// assert_eq!(options.loops, Some(2));
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Options {
     /// The most columns to use.
     pub cols: u32,
@@ -50,6 +59,8 @@ pub struct Options {
     pub loops: Option<u32>,
     /// Frames per second for video.
     pub fps: u32,
+    /// Whether to dither, see [`to_display_dithered`].
+    pub dither: bool,
 }
 
 impl Options {
@@ -61,6 +72,34 @@ impl Options {
             rows,
             loops: None,
             fps: DEFAULT_FPS,
+            dither: false,
+        }
+    }
+
+    /// Sets how many times a gif or video plays, see [`Options::loops`].
+    pub fn with_loops(mut self, loops: Option<u32>) -> Options {
+        self.loops = loops;
+        self
+    }
+
+    /// Sets the frames per second used for video.
+    pub fn with_fps(mut self, fps: u32) -> Options {
+        self.fps = fps;
+        self
+    }
+
+    /// Turns dithering on or off.
+    pub fn with_dither(mut self, dither: bool) -> Options {
+        self.dither = dither;
+        self
+    }
+
+    /// Scales and draws `image` according to these options.
+    pub fn display(&self, image: &image::RgbImage) -> terminal_graphics::Display {
+        if self.dither {
+            to_display_dithered(image, self.cols, self.rows)
+        } else {
+            to_display(image, self.cols, self.rows)
         }
     }
 }
@@ -106,23 +145,16 @@ pub fn pick_size(
 /// Output is ANSI escape codes, so `out` is normally `stdout`.
 pub fn show<W: Write>(out: &mut W, input: &str, options: &Options) -> Result<(), Error> {
     if is_video(input) {
-        return play_video(
-            out,
-            input,
-            options.cols,
-            options.rows,
-            options.fps,
-            options.loops.unwrap_or(1),
-        );
+        return play_video(out, input, options);
     }
 
     let bytes = read(input)?;
     if is_gif(&bytes) {
         let frames = load_frames(&bytes)?;
-        play(out, &frames, options.cols, options.rows, options.loops)?;
+        play(out, &frames, options)?;
     } else {
         let image = load_image(&bytes)?;
-        show_image(out, &image, options.cols, options.rows)?;
+        show_image(out, &image, options)?;
     }
     Ok(())
 }
@@ -131,28 +163,21 @@ pub fn show<W: Write>(out: &mut W, input: &str, options: &Options) -> Result<(),
 pub fn show_image<W: Write>(
     out: &mut W,
     image: &image::RgbImage,
-    cols: u32,
-    rows: u32,
+    options: &Options,
 ) -> io::Result<()> {
-    let display = to_display(image, cols, rows);
+    let display = options.display(image);
     reserve_space(out, &display)?;
     display.write_to(out)?;
     out.flush()
 }
 
-/// Plays `frames` in place, `loops` times (forever if `None`), waiting each
-/// frame's delay. A single frame is just drawn once.
-pub fn play<W: Write>(
-    out: &mut W,
-    frames: &[Frame],
-    cols: u32,
-    rows: u32,
-    loops: Option<u32>,
-) -> io::Result<()> {
+/// Plays `frames` in place, `options.loops` times (forever if `None`),
+/// waiting each frame's delay. A single frame is just drawn once.
+pub fn play<W: Write>(out: &mut W, frames: &[Frame], options: &Options) -> io::Result<()> {
     // scale every frame once up front rather than on every loop
     let displays: Vec<_> = frames
         .iter()
-        .map(|frame| (to_display(&frame.image, cols, rows), frame.delay))
+        .map(|frame| (options.display(&frame.image), frame.delay))
         .collect();
     let Some((first, _)) = displays.first() else {
         return Ok(());
@@ -169,7 +194,7 @@ pub fn play<W: Write>(
             }
         }
         played += 1;
-        if displays.len() == 1 || loops.is_some_and(|loops| played >= loops) {
+        if displays.len() == 1 || options.loops.is_some_and(|loops| played >= loops) {
             return Ok(());
         }
     }
@@ -219,7 +244,7 @@ mod tests {
     fn a_still_image_is_drawn_once_below_reserved_space() {
         let image = RgbImage::from_pixel(4, 4, Rgb([255, 0, 0]));
         let mut out = Vec::new();
-        show_image(&mut out, &image, 10, 10).unwrap();
+        show_image(&mut out, &image, &Options::new(10, 10)).unwrap();
 
         let text = String::from_utf8(out).unwrap();
         // 4x4 pixels scale to 20 columns... capped by the 10 columns we gave it
@@ -231,7 +256,7 @@ mod tests {
     fn frames_play_the_requested_number_of_times() {
         let frames = [solid([255, 0, 0]), solid([0, 0, 255])];
         let mut out = Vec::new();
-        play(&mut out, &frames, 2, 1, Some(3)).unwrap();
+        play(&mut out, &frames, &Options::new(2, 1).with_loops(Some(3))).unwrap();
 
         let text = String::from_utf8(out).unwrap();
         // 2 frames x 3 loops, each of 2 cells
@@ -243,14 +268,14 @@ mod tests {
     #[test]
     fn a_single_frame_is_not_looped() {
         let mut out = Vec::new();
-        play(&mut out, &[solid([0, 255, 0])], 2, 1, None).unwrap();
+        play(&mut out, &[solid([0, 255, 0])], &Options::new(2, 1)).unwrap();
         assert_eq!(String::from_utf8(out).unwrap().matches('▄').count(), 2);
     }
 
     #[test]
     fn no_frames_draws_nothing() {
         let mut out = Vec::new();
-        play(&mut out, &[], 10, 10, None).unwrap();
+        play(&mut out, &[], &Options::new(10, 10)).unwrap();
         assert!(out.is_empty());
     }
 }

@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use image::RgbImage;
 
-use crate::{extension, fit, to_display, Error};
+use crate::{extension, fit, Error, Options};
 
 /// File extensions that are treated as video.
 const VIDEO_EXTENSIONS: &[&str] = &[
@@ -36,23 +36,17 @@ pub fn is_video(input: &str) -> bool {
 }
 
 /// Plays the video at `input` (a path or web address) in `out`, scaled to fit
-/// `cols` by `rows` cells at `fps` frames per second, `loops` times.
+/// `options.cols` by `options.rows` cells at `options.fps` frames per second,
+/// `options.loops` times (once if `None`).
 ///
 /// Needs `ffmpeg` and `ffprobe` on the `PATH`; without them this returns
 /// [`Error::Video`] saying so.
-pub fn play_video<W: Write>(
-    out: &mut W,
-    input: &str,
-    cols: u32,
-    rows: u32,
-    fps: u32,
-    loops: u32,
-) -> Result<(), Error> {
-    let fps = fps.max(1);
+pub fn play_video<W: Write>(out: &mut W, input: &str, options: &Options) -> Result<(), Error> {
+    let fps = options.fps.max(1);
     let source = probe(input)?;
-    let (width, height) = fit(source, cols, rows);
+    let (width, height) = fit(source, options.cols, options.rows);
 
-    for played in 0..loops.max(1) {
+    for played in 0..options.loops.unwrap_or(1).max(1) {
         let mut child = Command::new("ffmpeg")
             .args(ffmpeg_args(input, width, height, fps))
             .stdin(Stdio::null())
@@ -66,7 +60,7 @@ pub fn play_video<W: Write>(
         let mut frame_number = 0u32;
         let mut reserved = played > 0;
         let result = read_frames(&mut stdout, width, height, |frame| {
-            let display = to_display(&frame, cols, rows);
+            let display = options.display(&frame);
             if !reserved {
                 out.write_all("\n".repeat(display.height() as usize).as_bytes())?;
                 reserved = true;

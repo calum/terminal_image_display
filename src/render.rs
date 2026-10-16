@@ -58,6 +58,44 @@ pub fn fit(size: (u32, u32), max_cols: u32, max_rows: u32) -> (u32, u32) {
 /// assert_eq!(cell.colour(), Colour::BrightBlue);
 /// ```
 pub fn to_display(image: &RgbImage, max_cols: u32, max_rows: u32) -> Display {
+    build(image, max_cols, max_rows, false)
+}
+
+/// Like [`to_display`], but spreads the colour error over neighbouring pixels
+/// (Floyd-Steinberg dithering). With only 16 colours to choose from this
+/// turns flat bands in gradients, skies and photos into smooth looking
+/// patterns, at the cost of some noise in flat areas.
+///
+/// ```
+/// use image::{Rgb, RgbImage};
+///
+/// // this grey is between two of the 16 colours, so it is made from both
+/// let grey = RgbImage::from_pixel(8, 8, Rgb([106, 106, 106]));
+/// let plain = termage::to_display(&grey, 8, 4);
+/// let dithered = termage::to_display_dithered(&grey, 8, 4);
+///
+/// let colours = |display: &terminal_graphics::Display| {
+///     let mut seen = Vec::new();
+///     for y in 0..display.height() as isize {
+///         for x in 0..display.width() as isize {
+///             let cell = display.pixel(x, y).unwrap();
+///             for colour in [cell.colour(), cell.background()] {
+///                 if !seen.contains(&colour) {
+///                     seen.push(colour);
+///                 }
+///             }
+///         }
+///     }
+///     seen.len()
+/// };
+/// assert_eq!(colours(&plain), 1);
+/// assert!(colours(&dithered) > 1);
+/// ```
+pub fn to_display_dithered(image: &RgbImage, max_cols: u32, max_rows: u32) -> Display {
+    build(image, max_cols, max_rows, true)
+}
+
+fn build(image: &RgbImage, max_cols: u32, max_rows: u32, dither: bool) -> Display {
     let (width, height) = fit(image.dimensions(), max_cols, max_rows);
     let (source_width, source_height) = image.dimensions();
     // nearest keeps pixel art crisp when scaling up; averaging looks right when scaling down
@@ -72,20 +110,66 @@ pub fn to_display(image: &RgbImage, max_cols: u32, max_rows: u32) -> Display {
         imageops::resize(image, width, height, filter)
     };
 
+    let colours = if dither {
+        dithered_colours(&scaled)
+    } else {
+        scaled
+            .pixels()
+            .map(|pixel| Colour::from_rgb(pixel[0], pixel[1], pixel[2]))
+            .collect()
+    };
+
     let mut display = Display::new(width, height / 2);
     for row in 0..height / 2 {
         for x in 0..width {
-            let upper = colour_of(&scaled, x, row * 2);
-            let lower = colour_of(&scaled, x, row * 2 + 1);
-            display.set_pixel(x as isize, row as isize, HALF_BLOCK, lower, upper);
+            let at = |y: u32| colours[(y * width + x) as usize];
+            display.set_pixel(
+                x as isize,
+                row as isize,
+                HALF_BLOCK,
+                at(row * 2 + 1),
+                at(row * 2),
+            );
         }
     }
     display
 }
 
-fn colour_of(image: &RgbImage, x: u32, y: u32) -> Colour {
-    let [red, green, blue] = image.get_pixel(x, y).0;
-    Colour::from_rgb(red, green, blue)
+/// Picks a colour for every pixel (left to right, top to bottom) with
+/// Floyd-Steinberg error diffusion: whatever a pixel's colour got wrong is
+/// handed on to the pixels beside and below it, so that on average they come
+/// out right. A flat patch of a colour that is in the palette stays flat.
+fn dithered_colours(image: &RgbImage) -> Vec<Colour> {
+    let (width, height) = (image.width() as usize, image.height() as usize);
+    let mut pending: Vec<[f32; 3]> = image.pixels().map(|pixel| pixel.0.map(f32::from)).collect();
+    let mut colours = Vec::with_capacity(width * height);
+
+    for y in 0..height {
+        for x in 0..width {
+            let wanted = pending[y * width + x];
+            let [red, green, blue] = wanted.map(|channel| channel.clamp(0.0, 255.0) as u8);
+            let colour = Colour::from_rgb(red, green, blue);
+            colours.push(colour);
+
+            let (r, g, b) = colour.rgb();
+            let error = [
+                wanted[0] - f32::from(r),
+                wanted[1] - f32::from(g),
+                wanted[2] - f32::from(b),
+            ];
+            for (dx, dy, share) in [(1, 0, 7.0), (-1, 1, 3.0), (0, 1, 5.0), (1, 1, 1.0)] {
+                let (nx, ny) = (x as isize + dx, y + dy as usize);
+                if nx < 0 || nx >= width as isize || ny >= height {
+                    continue;
+                }
+                let target = &mut pending[ny * width + nx as usize];
+                for channel in 0..3 {
+                    target[channel] += error[channel] * share / 16.0;
+                }
+            }
+        }
+    }
+    colours
 }
 
 #[cfg(test)]
@@ -178,5 +262,58 @@ mod tests {
     fn a_one_pixel_image_still_draws() {
         let display = to_display(&RgbImage::new(1, 1), 10, 10);
         assert!(display.width() >= 1 && display.height() >= 1);
+    }
+
+    fn distinct_colours(display: &Display) -> usize {
+        let mut seen = Vec::new();
+        for y in 0..display.height() as isize {
+            for x in 0..display.width() as isize {
+                let cell = display.pixel(x, y).unwrap();
+                for colour in [cell.colour(), cell.background()] {
+                    if !seen.contains(&colour) {
+                        seen.push(colour);
+                    }
+                }
+            }
+        }
+        seen.len()
+    }
+
+    #[test]
+    fn dithering_mixes_colours_to_approximate_one_in_between() {
+        let grey = RgbImage::from_pixel(16, 16, Rgb([106, 106, 106]));
+        assert_eq!(distinct_colours(&to_display(&grey, 16, 8)), 1);
+        assert!(distinct_colours(&to_display_dithered(&grey, 16, 8)) >= 2);
+    }
+
+    #[test]
+    fn dithering_leaves_black_and_white_alone() {
+        for colour in [[0, 0, 0], [255, 255, 255]] {
+            let flat = RgbImage::from_pixel(8, 8, Rgb(colour));
+            let plain = to_display(&flat, 8, 4);
+            assert_eq!(to_display_dithered(&flat, 8, 4), plain, "{colour:?}");
+        }
+    }
+
+    #[test]
+    fn dithering_does_not_change_the_size() {
+        let image = RgbImage::from_pixel(40, 30, Rgb([90, 160, 40]));
+        assert_eq!(
+            to_display_dithered(&image, 20, 10).size(),
+            to_display(&image, 20, 10).size()
+        );
+    }
+
+    #[test]
+    fn a_dithered_gradient_uses_more_colours_than_a_plain_one() {
+        let mut gradient = RgbImage::new(64, 8);
+        for (x, _, pixel) in gradient.enumerate_pixels_mut() {
+            let v = (x * 4) as u8;
+            *pixel = Rgb([v, v / 2, 255 - v]);
+        }
+        assert!(
+            distinct_colours(&to_display_dithered(&gradient, 64, 4))
+                > distinct_colours(&to_display(&gradient, 64, 4))
+        );
     }
 }
